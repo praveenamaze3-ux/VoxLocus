@@ -23,23 +23,6 @@
 //  iOS 26+: Uses MKReverseGeocodingRequest + MKAddress (fullAddress / shortAddress)
 //           and MKAddressRepresentations for formatted strings.
 //  iOS 25 and below: Falls back to CLGeocoder + MKPlacemark.
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//  iOS 26+: Uses MKReverseGeocodingRequest + MKAddress (fullAddress / shortAddress)
-//           and MKAddressRepresentations for formatted strings.
-//  iOS 25 and below: Falls back to CLGeocoder + MKPlacemark.
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//  iOS 26+: Uses MKReverseGeocodingRequest + MKAddress (fullAddress / shortAddress)
-//           and MKAddressRepresentations for formatted strings.
-//  iOS 25 and below: Falls back to CLGeocoder + MKPlacemark.
-//
 
 import SwiftUI
 import MapKit
@@ -52,11 +35,7 @@ struct LocationResult: Identifiable, Hashable {
     let name: String
     let subtitle: String
     let coordinate: CLLocationCoordinate2D
-
-    var displayTitle: String {
-        subtitle.isEmpty ? name : "\(name), \(subtitle)"
-    }
-
+    var displayTitle: String { subtitle.isEmpty ? name : "\(name), \(subtitle)" }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: LocationResult, rhs: LocationResult) -> Bool { lhs.id == rhs.id }
 }
@@ -69,36 +48,24 @@ final class LocationSearchViewModel: ObservableObject {
     @Published var results: [LocationResult] = []
     @Published var isSearching = false
     @Published var errorMessage: String?
-
     private var searchTask: Task<Void, Never>?
-
     init() {}
 
     func search() {
         searchTask?.cancel()
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { results = []; return }
-
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
-
-            isSearching = true
-            errorMessage = nil
-
+            isSearching = true; errorMessage = nil
             let request = MKLocalSearch.Request()
             request.naturalLanguageQuery = q
-            // No region set — results are driven purely by the user's
-            // typed query, not biased toward device location.
             request.resultTypes = [.pointOfInterest, .address]
-
             do {
                 let response = try await MKLocalSearch(request: request).start()
                 guard !Task.isCancelled else { return }
-
-                results = response.mapItems.map { item in
-                    subtitleForItem(item, name: item.name ?? "Unknown")
-                }
+                results = response.mapItems.map { subtitleForItem($0) }
             } catch {
                 guard !Task.isCancelled else { return }
                 if (error as NSError).code != NSURLErrorCancelled {
@@ -109,35 +76,23 @@ final class LocationSearchViewModel: ObservableObject {
         }
     }
 
-    private func subtitleForItem(_ item: MKMapItem, name: String) -> LocationResult {
-
+    private func subtitleForItem(_ item: MKMapItem) -> LocationResult {
+        let name = item.name ?? "Unknown"
         if #available(iOS 26.0, *) {
-            let coordinate = item.location.coordinate
-            // Use fullAddress so the user can clearly confirm which
-            // specific place they're selecting (city, country etc.)
-            let subtitle   = item.address?.fullAddress
-                          ?? item.address?.shortAddress
-                          ?? ""
-            return LocationResult(name: name, subtitle: subtitle, coordinate: coordinate)
+            let coord    = item.location.coordinate
+            let subtitle = item.address?.fullAddress ?? item.address?.shortAddress ?? ""
+            return LocationResult(name: name, subtitle: subtitle, coordinate: coord)
         } else {
-            // Pre-iOS 26: CLPlacemark fields, no placemark.coordinate needed.
-            let coordinate = CLLocationCoordinate2D(
+            let coord = CLLocationCoordinate2D(
                 latitude:  item.placemark.location?.coordinate.latitude  ?? 0,
-                longitude: item.placemark.location?.coordinate.longitude ?? 0
-            )
-            let parts = [item.placemark.locality,
-                         item.placemark.administrativeArea]
+                longitude: item.placemark.location?.coordinate.longitude ?? 0)
+            let parts = [item.placemark.locality, item.placemark.administrativeArea]
                 .compactMap { $0 }.filter { !$0.isEmpty }
-            return LocationResult(name: name,
-                                  subtitle: parts.joined(separator: ", "),
-                                  coordinate: coordinate)
+            return LocationResult(name: name, subtitle: parts.joined(separator: ", "), coordinate: coord)
         }
     }
 
-    func clear() {
-        searchTask?.cancel()
-        query = ""; results = []; errorMessage = nil
-    }
+    func clear() { searchTask?.cancel(); query = ""; results = []; errorMessage = nil }
 }
 
 // MARK: - Sheet View
@@ -146,98 +101,146 @@ struct LocationSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm = LocationSearchViewModel()
     @EnvironmentObject var locationService: LocationGeofenceService
-
     let onSelect: (LocationResult) -> Void
 
     var body: some View {
         NavigationStack {
-            List {
-                // "Use my current location" shortcut
-                if locationService.currentLocation != nil {
-                    Button { useCurrentLocation() } label: {
-                        Label("Use My Current Location", systemImage: "location.fill")
-                            .foregroundStyle(.blue)
+            ZStack {
+                AppTheme.background.ignoresSafeArea()
+                VStack(spacing: 0) {
+                    // Current location shortcut
+                    if locationService.currentLocation != nil {
+                        Button { useCurrentLocation() } label: {
+                            HStack(spacing: 10) {
+                                ZStack {
+                                    Circle()
+                                        .fill(AppTheme.accent.opacity(0.15))
+                                        .frame(width: 36, height: 36)
+                                    Image(systemName: "location.fill")
+                                        .foregroundStyle(AppTheme.accent)
+                                        .font(.subheadline)
+                                }
+                                Text("Use My Current Location")
+                                    .font(.body.bold())
+                                    .foregroundStyle(AppTheme.accent)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(AppTheme.textSecondary)
+                                    .font(.caption)
+                            }
+                            .padding(14)
+                            .themedCard()
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
+                        }
+                        .buttonStyle(.plain)
                     }
-                }
 
-                if vm.isSearching {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Searching…").foregroundStyle(.secondary)
-                    }
-                } else if vm.results.isEmpty && !vm.query.isEmpty {
-                    Text("No results for \"\(vm.query)\"")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(vm.results) { result in
-                        Button {
-                            onSelect(result)
-                            dismiss()
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(result.name)
-                                    .font(.body)
-                                    .foregroundStyle(.primary)
-                                if !result.subtitle.isEmpty {
-                                    Text(result.subtitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
+                    // Results
+                    if vm.isSearching {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            ProgressView().tint(AppTheme.accent)
+                            Text("Searching…")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        Spacer()
+                    } else if vm.results.isEmpty && !vm.query.isEmpty {
+                        Spacer()
+                        VStack(spacing: 12) {
+                            Image(systemName: "mappin.slash")
+                                .font(.system(size: 36))
+                                .foregroundStyle(AppTheme.textSecondary)
+                            Text("No results for \"\(vm.query)\"")
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 10) {
+                                ForEach(vm.results) { result in
+                                    Button {
+                                        onSelect(result); dismiss()
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            ZStack {
+                                                Circle()
+                                                    .fill(AppTheme.recordingRed.opacity(0.15))
+                                                    .frame(width: 36, height: 36)
+                                                Image(systemName: "mappin.fill")
+                                                    .foregroundStyle(AppTheme.recordingRed)
+                                                    .font(.subheadline)
+                                            }
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(result.name)
+                                                    .font(.body.bold())
+                                                    .foregroundStyle(AppTheme.textPrimary)
+                                                if !result.subtitle.isEmpty {
+                                                    Text(result.subtitle)
+                                                        .font(.caption)
+                                                        .foregroundStyle(AppTheme.textSecondary)
+                                                        .lineLimit(2)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .foregroundStyle(AppTheme.textSecondary)
+                                                .font(.caption)
+                                        }
+                                        .padding(14)
+                                        .themedCard()
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 12)
                         }
                     }
-                }
 
-                if let err = vm.errorMessage {
-                    Text(err).font(.caption).foregroundStyle(.red)
+                    if let err = vm.errorMessage {
+                        Text(err).font(.caption)
+                            .foregroundStyle(AppTheme.recordingRed)
+                            .padding()
+                    }
                 }
             }
-            .listStyle(.plain)
             .navigationTitle("Add Location")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppTheme.surface, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { vm.clear(); dismiss() }
+                        .foregroundStyle(AppTheme.textSecondary)
                 }
             }
-            .searchable(
-                text: $vm.query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search for a place…"
-            )
+            .searchable(text: $vm.query,
+                        placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search for a place…")
             .onChange(of: vm.query) { _, _ in vm.search() }
         }
     }
-
-    // MARK: - Current location
 
     private func useCurrentLocation() {
         guard let location = locationService.currentLocation else { return }
         Task {
             if #available(iOS 26.0, *) {
-                // MKReverseGeocodingRequest is the iOS 26 replacement for CLGeocoder.
-                guard let request = MKReverseGeocodingRequest(location: location) else { return }
-                guard let item = try? await request.mapItems.first else { return }
+                guard let req = MKReverseGeocodingRequest(location: location),
+                      let item = try? await req.mapItems.first else { return }
                 let name     = item.name ?? "Current Location"
-                let subtitle = item.address?.shortAddress
-                            ?? item.address?.fullAddress
-                            ?? ""
+                let subtitle = item.address?.fullAddress ?? item.address?.shortAddress ?? ""
                 let coord    = item.location.coordinate
                 onSelect(LocationResult(name: name, subtitle: subtitle, coordinate: coord))
             } else {
-                // Pre-iOS 26 fallback.
                 let geocoder = CLGeocoder()
-                guard let placemark = try? await geocoder
-                    .reverseGeocodeLocation(location).first else { return }
+                guard let placemark = try? await geocoder.reverseGeocodeLocation(location).first else { return }
                 let parts = [placemark.locality, placemark.administrativeArea]
                     .compactMap { $0 }.filter { !$0.isEmpty }
-                onSelect(LocationResult(
-                    name: placemark.name ?? "Current Location",
-                    subtitle: parts.joined(separator: ", "),
-                    coordinate: location.coordinate
-                ))
+                onSelect(LocationResult(name: placemark.name ?? "Current Location",
+                                        subtitle: parts.joined(separator: ", "),
+                                        coordinate: location.coordinate))
             }
             dismiss()
         }
