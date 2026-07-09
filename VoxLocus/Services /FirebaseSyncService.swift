@@ -1,125 +1,93 @@
-//
-//  FirebaseSyncService.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-
-//
-//  FirebaseSyncService.swift
-//  SmartNotes
-//
-//  Pushes encrypted note payloads to Cloud Firestore. The plaintext
-//  transcript/todos never leave the device — only the AES-GCM sealed blob
-//  produced by EncryptionService is uploaded.
-//
-//  Requires: Firebase SDK (FirebaseFirestore) added via SPM, and a
-//  GoogleService-Info.plist added to the Xcode target.
-//
-
 import FirebaseFirestore
 import FirebaseAuth
 import Foundation
-internal import CoreData
 
 actor FirebaseSyncService {
 
     static let shared = FirebaseSyncService()
     private let db = Firestore.firestore()
 
-    /// Ensures we have an (anonymous, by default) authenticated user so
-    /// Firestore security rules can scope documents per-user.
-    private func ensureSignedIn() async throws -> String {
-        if let uid = Auth.auth().currentUser?.uid {
-            return uid
+    // MARK: - Auth guard
+
+    private func requireSignedInUID() throws -> String {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            throw SyncError.notAuthenticated
         }
-        let result = try await Auth.auth().signInAnonymously()
-        return result.user.uid
+        return uid
     }
 
-    /// Uploads one note's encrypted payload. Safe to call repeatedly —
-    /// uses `setData(merge:)` so re-syncs overwrite rather than duplicate.
-    func uploadEncryptedNote(id: UUID, encryptedPayload: Data, category: String, createdAt: Date) async throws {
-        let uid = try await ensureSignedIn()
-
+    func uploadNote(_ dto: NoteDTO) async throws {
+        let uid = try requireSignedInUID()
         let doc: [String: Any] = [
-            "id": id.uuidString,
-            "payload": encryptedPayload.base64EncodedString(),
-            "category": category,
-            "createdAt": Timestamp(date: createdAt),
-            "updatedAt": Timestamp(date: Date())
+            "id":               dto.id.uuidString,
+            "title":            dto.title,
+            "category":         dto.category,
+            "locationName":     dto.locationName ?? "",
+            "latitude":         dto.latitude,
+            "longitude":        dto.longitude,
+            "createdAt":        Timestamp(date: dto.createdAt),
+            "updatedAt":        Timestamp(date: dto.updatedAt),
+            "isDeleted":        false,
+            "encryptedPayload": (try? EncryptionService.encrypt(dto))?.base64EncodedString() ?? ""
         ]
-
-        try await db.collection("users")
-            .document(uid)
-            .collection("notes")
-            .document(id.uuidString)
+        try await db
+            .collection("users").document(uid)
+            .collection("notes").document(dto.id.uuidString)
             .setData(doc, merge: true)
     }
 
     func deleteNote(id: UUID) async throws {
-        let uid = try await ensureSignedIn()
-        try await db.collection("users")
-            .document(uid)
-            .collection("notes")
-            .document(id.uuidString)
-            .delete()
+        let uid = try requireSignedInUID()
+        try await db
+            .collection("users").document(uid)
+            .collection("notes").document(id.uuidString)
+            .updateData([
+                "isDeleted": true,
+                "updatedAt": Timestamp(date: Date())
+            ])
     }
 
-    /// Fetches and decrypts all of the signed-in user's notes (e.g. for a
-    /// fresh-install restore flow).
+    // MARK: - Fetch (restore)
+
     func fetchAllNotes() async throws -> [NoteDTO] {
-        let uid = try await ensureSignedIn()
-        let snapshot = try await db.collection("users")
-            .document(uid)
+        let uid = try requireSignedInUID()
+        let snapshot = try await db
+            .collection("users").document(uid)
             .collection("notes")
+            .whereField("isDeleted", isEqualTo: false)
             .getDocuments()
 
         return snapshot.documents.compactMap { doc -> NoteDTO? in
-            guard
-                let base64 = doc.data()["payload"] as? String,
-                let data = Data(base64Encoded: base64)
+            guard let base64 = doc.data()["encryptedPayload"] as? String,
+                  let data = Data(base64Encoded: base64)
             else { return nil }
             return try? EncryptionService.decrypt(data, as: NoteDTO.self)
         }
     }
+
+    enum SyncError: LocalizedError {
+        case notAuthenticated
+        var errorDescription: String? { "Sign in to sync notes." }
+    }
 }
 
-/// Lightweight retry queue so uploads survive transient connectivity loss.
-/// NotesListViewModel calls `enqueue` whenever a save happens offline;
-/// NetworkMonitor's connectivity callback triggers `flush()`.
+// MARK: - Retry Queue
+
 actor SyncRetryQueue {
     static let shared = SyncRetryQueue()
-    private var pending: [(UUID, Data, String, Date)] = []
+    private var pending: [NoteDTO] = []
 
-    func enqueue(id: UUID, payload: Data, category: String, createdAt: Date) {
-        pending.append((id, payload, category, createdAt))
+    func enqueue(_ dto: NoteDTO) {
+        pending.removeAll { $0.id == dto.id }
+        pending.append(dto)
     }
 
     func flush() async {
         guard !pending.isEmpty else { return }
-        let items = pending
-        pending.removeAll()
-        for (id, payload, category, createdAt) in items {
-            do {
-                try await FirebaseSyncService.shared.uploadEncryptedNote(
-                    id: id, encryptedPayload: payload, category: category, createdAt: createdAt
-                )
-                // Mark synced in Core Data so the UI updates.
-                let bgContext = PersistenceController.shared.newBackgroundContext()
-                await bgContext.perform {
-                    let request = NoteEntity.fetchRequest()
-                    request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
-                    if let entity = try? bgContext.fetch(request).first {
-                        entity.isSyncedToCloud = true
-                        try? bgContext.save()
-                    }
-                }
-            } catch {
-                print("⚠️ Retry sync failed for \(id): \(error.localizedDescription)")
-                // Re-queue for the next connectivity event.
-                pending.append((id, payload, category, createdAt))
-            }
+        let items = pending; pending.removeAll()
+        for dto in items {
+            do { try await FirebaseSyncService.shared.uploadNote(dto) }
+            catch { pending.append(dto) }
         }
     }
 }

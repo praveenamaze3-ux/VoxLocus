@@ -1,29 +1,3 @@
-//
-//  LocationSearchView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 01/07/26.
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//
-//  LocationSearchView.swift
-//  SmartNotes
-//
-//  iOS 26+: Uses MKReverseGeocodingRequest + MKAddress (fullAddress / shortAddress)
-//           and MKAddressRepresentations for formatted strings.
-//  iOS 25 and below: Falls back to CLGeocoder + MKPlacemark.
-
 import SwiftUI
 import MapKit
 import Combine
@@ -208,7 +182,6 @@ struct LocationSearchView: View {
             }
             .navigationTitle("Add Location")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppTheme.surface, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

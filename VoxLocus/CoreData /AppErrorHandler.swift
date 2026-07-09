@@ -1,16 +1,3 @@
-//
-//  AppErrorHandler.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 01/07/26.
-//
-//
-//  AppErrorHandler.swift
-//  SmartNotes
-//
-//  Centralised error types and safe task launcher — zero UIKit.
-//
-
 import Foundation
 internal import CoreData
 import SwiftUI
@@ -36,7 +23,6 @@ enum AppError: LocalizedError {
         }
     }
 
-    /// Show alert for user-actionable errors; log silently for recoverable ones.
     var shouldAlert: Bool {
         switch self {
         case .networkUnavailable, .syncFailed: return false
@@ -61,8 +47,6 @@ func assertBackgroundThread(file: String = #file, line: Int = #line) {
 
 // MARK: - Safe Task launcher
 
-/// Runs an async throwing operation and routes errors to a SwiftUI binding
-/// instead of letting them propagate as unhandled crashes.
 func safeTask(
     errorBinding: Binding<String?>,
     operation: @escaping () async throws -> Void
@@ -88,8 +72,6 @@ func safeTask(
 
 // MARK: - Core Data fault guard
 
-/// Safely reads from a managed object, returning `fallback` if the
-/// object is faulted or deleted instead of crashing.
 func guardFault<T: NSManagedObject, R>(
     _ object: T,
     fallback: R,

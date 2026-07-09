@@ -1,16 +1,3 @@
-//
-//  SafeCoreData.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 01/07/26.
-//
-//
-//  SafeCoreData.swift
-//  SmartNotes
-//
-//  Single source of truth for safe Core Data access.
-//  Import this pattern everywhere instead of guarding in each view.
-//
 //  HOW EXC_BAD_INSTRUCTION HAPPENS:
 //  Core Data uses lazy "faulting" — when an object is deleted or its
 //  context is reset, the NSManagedObject shell stays in memory but its
@@ -72,9 +59,7 @@ struct SafeManagedObjectModifier: ViewModifier {
 }
 
 extension View {
-    /// Attach to any detail/edit view that displays one Core Data entity.
-    /// Dismisses automatically if the entity is deleted from underneath it.
-    func dismissWhenDeleted(_ object: NSManagedObject) -> some View {
+        func dismissWhenDeleted(_ object: NSManagedObject) -> some View {
         modifier(SafeManagedObjectModifier(object: object))
     }
 }

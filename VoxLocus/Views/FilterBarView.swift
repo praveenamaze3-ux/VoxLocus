@@ -1,9 +1,4 @@
-//
-//  FilterBarView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
+
 import SwiftUI
 
 struct FilterBarView: View {
@@ -13,76 +8,66 @@ struct FilterBarView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Category chips
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    chip(title: "All", icon: "tray.fill",
-                         color: AppTheme.accent,
-                         isSelected: selectedCategory == nil) {
-                        selectedCategory = nil
-                    }
-                    ForEach(NoteCategory.allCases) { cat in
-                        let color = AppTheme.categoryColor(for: cat.rawValue)
-                        chip(title: cat.rawValue, icon: cat.systemImage,
-                             color: color,
-                             isSelected: selectedCategory == cat) {
-                            selectedCategory = (selectedCategory == cat) ? nil : cat
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        chip(title: "All", isSelected: selectedCategory == nil) {
+                            selectedCategory = nil
+                        }
+                        ForEach(NoteCategory.allCases) { category in
+                            chip(title: category.rawValue, systemImage: category.systemImage, isSelected: selectedCategory == category) {
+                                selectedCategory = (selectedCategory == category) ? nil : category
+                            }
                         }
                     }
+                    .padding(.horizontal)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
             }
 
-            // General filter toggles
-            HStack(spacing: 10) {
-                filterToggle(label: "Has To-Dos", icon: "checklist",
-                             isOn: $showOnlyWithTodos, color: AppTheme.success)
-                filterToggle(label: "Nearby", icon: "location.fill",
-                             isOn: $showOnlyNearby, color: AppTheme.saveAmber)
+            HStack(spacing: 16) {
+                Toggle(isOn: $showOnlyWithTodos) {
+                    Label("Has To-Dos", systemImage: "checklist")
+                }
+                .toggleStyle(.button)
+                .tint(AppTheme.accent)
+                .font(.caption)
+
+                Toggle(isOn: $showOnlyNearby) {
+                    Label("Nearby", systemImage: "location.fill")
+                }
+                .toggleStyle(.button)
+                .tint(AppTheme.accent)
+                .font(.caption)
+
                 Spacer()
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 4)
+            .padding(.horizontal)
+            .foregroundStyle(AppTheme.textSecondary)
         }
-        .background(Color(hex: "#0A0C24"))
+        .padding(.vertical, 6)
+        .background(AppTheme.background)
     }
 
-    private func chip(title: String, icon: String, color: Color,
-                      isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func chip(title: String, systemImage: String? = nil, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: icon).font(.caption2)
-                Text(title).font(.caption.bold())
+                if let systemImage {
+                    Image(systemName: systemImage)
+                }
+                Text(title)
             }
+            .font(.caption.bold())
             .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                isSelected ? color : AppTheme.surface,
-                in: Capsule()
-            )
-            .overlay(Capsule().strokeBorder(
-                isSelected ? color : AppTheme.border, lineWidth: 1)
-            )
-            .foregroundStyle(isSelected ? .white : AppTheme.textSecondary)
-        }
-    }
-
-    private func filterToggle(label: String, icon: String,
-                               isOn: Binding<Bool>, color: Color) -> some View {
-        Button { isOn.wrappedValue.toggle() } label: {
-            HStack(spacing: 4) {
-                Image(systemName: icon).font(.caption2)
-                Text(label).font(.caption.bold())
-            }
-            .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(isOn.wrappedValue ? color.opacity(0.2) : AppTheme.surface,
-                        in: Capsule())
-            .overlay(Capsule().strokeBorder(
-                isOn.wrappedValue ? color : AppTheme.border, lineWidth: 1)
-            )
-            .foregroundStyle(isOn.wrappedValue ? color : AppTheme.textSecondary)
+            .foregroundStyle(isSelected ? AppTheme.background : AppTheme.textSecondary)
         }
+        .buttonStyle(.plain)
+        .glassEffect(
+            isSelected ? .regular.tint(AppTheme.accent).interactive() : .regular.interactive(),
+            in: .capsule
+        )
     }
+}
+#Preview {
+    FilterBarView(selectedCategory: .constant(nil), showOnlyWithTodos: .constant(false), showOnlyNearby: .constant(false))
 }

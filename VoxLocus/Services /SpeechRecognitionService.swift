@@ -1,16 +1,3 @@
-//
-//  SpeechRecognitionService.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-//
-//  SpeechRecognitionService.swift
-//  SmartNotes
-//
-//  Wraps Speech + AVAudioEngine. Recording starts immediately when requested
-//  and streams partial transcripts; stopping finalizes the transcript.
-//
 
 import Speech
 import AVFoundation
@@ -21,6 +8,8 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
 
     @Published var transcript: String = ""
     @Published var isRecording: Bool = false
+    /// True when a session is active but capture is temporarily suspended.
+    @Published var isPaused: Bool = false
     @Published var authorizationError: String?
 
     private let audioEngine = AVAudioEngine()
@@ -54,6 +43,13 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         task?.cancel()
         task = nil
 
+        // Check availability before touching the audio session/engine, so a
+        // failure here doesn't leave the engine started with no task
+        // consuming its buffers (which broke the next recording attempt too).
+        guard let recognizer, recognizer.isAvailable else {
+            throw NSError(domain: "SmartNotes", code: 1, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer unavailable"])
+        }
+
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: .duckOthers)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
@@ -79,11 +75,8 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         audioEngine.prepare()
         try audioEngine.start()
         isRecording = true
+        isPaused = false
         transcript = ""
-
-        guard let recognizer, recognizer.isAvailable else {
-            throw NSError(domain: "SmartNotes", code: 1, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer unavailable"])
-        }
 
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             guard let self else { return }
@@ -101,6 +94,23 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         }
     }
 
+    /// Suspends audio capture without ending the recognition session, so
+    /// `transcript` keeps accumulating across a later `resumeRecording()`
+    /// instead of being reset like a full `stopRecording()` would do.
+    func pauseRecording() {
+        guard isRecording, !isPaused else { return }
+        audioEngine.pause()
+        isPaused = true
+    }
+
+    /// Resumes capture on the same recognition session that was suspended
+    /// by `pauseRecording()`.
+    func resumeRecording() throws {
+        guard isRecording, isPaused else { return }
+        try audioEngine.start()
+        isPaused = false
+    }
+
     /// Stops capture and returns the final transcript string.
     @discardableResult
     func stopRecording() -> String {
@@ -116,6 +126,7 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         audioEngine.inputNode.removeTap(onBus: 0)
         request?.endAudio()
         isRecording = false
+        isPaused = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }

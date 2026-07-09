@@ -1,18 +1,3 @@
-//
-//  NotesListViewModel.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-//
-//  NotesListViewModel.swift
-//  SmartNotes
-//
-//
-//  NotesListViewModel.swift
-//  SmartNotes
-//
-
 import Foundation
 internal import CoreData
 import Combine
@@ -29,6 +14,7 @@ final class NotesListViewModel: NSObject, ObservableObject {
     private var fetchedResultsController: NSFetchedResultsController<NoteEntity>!
     private let context: NSManagedObjectContext
     private let locationService: LocationGeofenceService
+    private var cancellables = Set<AnyCancellable>()
 
     init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext,
          locationService: LocationGeofenceService) {
@@ -36,10 +22,15 @@ final class NotesListViewModel: NSObject, ObservableObject {
         self.locationService = locationService
         super.init()
         configureFetchedResultsController()
+        observeLocationSuggestions()
     }
+
+    // MARK: - FRC
 
     private func configureFetchedResultsController() {
         let request = NoteEntity.fetchRequest()
+        // Exclude soft-deleted notes.
+        request.predicate = NSPredicate(format: "isSoftDeleted == NO OR isSoftDeleted == nil")
         request.sortDescriptors = [NSSortDescriptor(keyPath: \NoteEntity.createdAt, ascending: false)]
 
         fetchedResultsController = NSFetchedResultsController(
@@ -49,149 +40,127 @@ final class NotesListViewModel: NSObject, ObservableObject {
             cacheName: nil
         )
         fetchedResultsController.delegate = self
-
         do {
             try fetchedResultsController.performFetch()
             notes = fetchedResultsController.fetchedObjects ?? []
-        } catch {
-            print("⚠️ Fetch error: \(error)")
-        }
+        } catch { print("⚠️ Fetch error: \(error)") }
     }
 
-    /// Combines text search, category filter, "has todos" filter, and
-    /// proximity-based geofence suggestions.
+    private func observeLocationSuggestions() {
+        locationService.$suggestedNoteIDs
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Safe managed object access
+
+    /// Returns note.id only if the object is still alive in its context.
+    /// Prevents EXC_BAD_INSTRUCTION when a note is mid-deletion.
+    private func safeID(for note: NoteEntity) -> UUID? {
+        guard note.managedObjectContext != nil, !note.isSoftDeleted else { return nil }
+        return note.id
+    }
+
+    // MARK: - Filtering (all original filters preserved)
+
     var filteredNotes: [NoteEntity] {
         notes.filter { note in
-            // Guard against faulted/deleted objects reaching the list rows.
-            guard !note.isDeleted, note.managedObjectContext != nil else { return false }
+            guard note.managedObjectContext != nil, !note.isSoftDeleted else { return false }
             let matchesCategory = selectedCategory == nil || note.category == selectedCategory?.rawValue
-            let matchesSearch = searchText.isEmpty ||
-                (note.transcript?.localizedCaseInsensitiveContains(searchText) ?? false)
-            let matchesTodos = !showOnlyWithTodos || !note.todos.isEmpty
-            let matchesNearby = !showOnlyNearby || locationService.suggestedNoteIDs.contains(note.id)
+            let matchesSearch   = searchText.isEmpty ||
+                (note.transcript?.localizedCaseInsensitiveContains(searchText) ?? false) ||
+                (note.title?.localizedCaseInsensitiveContains(searchText) ?? false)
+            let matchesTodos  = !showOnlyWithTodos || !note.todos.isEmpty
+            let matchesNearby: Bool = {
+                guard showOnlyNearby else { return true }
+                guard let id = safeID(for: note) else { return false }
+                return locationService.suggestedNoteIDs.contains(id)
+            }()
             return matchesCategory && matchesSearch && matchesTodos && matchesNearby
         }
     }
 
-    /// Notes the user is currently geofenced-near — surfaced as a banner.
+    /// Notes geofenced-near the user — shown in the banner.
     var nearbySuggestions: [NoteEntity] {
-        notes.filter { locationService.suggestedNoteIDs.contains($0.id) }
+        notes.compactMap { note -> NoteEntity? in
+            guard let id = safeID(for: note) else { return nil }
+            return locationService.suggestedNoteIDs.contains(id) ? note : nil
+        }
     }
+
+    // MARK: - Delete (soft)
 
     func delete(_ note: NoteEntity) {
+        // Snapshot UUID BEFORE any mutation — entity may fault after saveContext.
         let id = note.id
         locationService.removeGeofence(noteID: id)
-        context.delete(note)
+
+        note.isSoftDeleted   = true
+        note.updatedAt       = Date()
+        note.isSyncedToCloud = false
+        PersistenceController.shared.saveContext(context)
+        // Never reference `note` below this line — use `id` only.
+
+        Task { try? await FirebaseSyncService.shared.deleteNote(id: id) }
+    }
+
+    // MARK: - Edit persistence
+
+    /// Saves title/transcript/category/todos changes to CoreData and re-syncs to Firestore.
+    func saveEdits(note: NoteEntity, newTitle: String, newTranscript: String,
+                   newCategory: String, newTodos: [TodoItem]) async throws {
+        note.title           = newTitle
+        note.transcript      = newTranscript
+        note.category        = newCategory
+        note.todos           = newTodos
+        note.updatedAt       = Date()
+        note.isSyncedToCloud = false
         PersistenceController.shared.saveContext(context)
 
+        guard let dto = buildDTO(from: note) else { return }
         Task {
-            try? await FirebaseSyncService.shared.deleteNote(id: id)
-        }
-    }
-
-    /// Updates an existing note's transcript, category, and todos, then
-    /// re-encrypts and re-syncs to Firebase.
-    func updateNote(
-        _ note: NoteEntity,
-        transcript: String,
-        category: NoteCategory,
-        todos: [TodoItem],
-        location: LocationResult? = nil
-    ) async throws {
-        guard !note.isDeleted, note.managedObjectContext != nil else { return }
-
-        // Update on a background context to keep the main thread free.
-        let bgContext = PersistenceController.shared.newBackgroundContext()
-        let noteID = note.id
-
-        try await bgContext.perform {
-            let request = NoteEntity.fetchRequest()
-            request.predicate = NSPredicate(format: "id == %@", noteID as CVarArg)
-            guard let entity = try bgContext.fetch(request).first else { return }
-
-            entity.transcript     = transcript
-            entity.category       = category.rawValue
-            entity.todos          = todos
-            entity.isSyncedToCloud = false  // will flip to true after successful upload
-
-            // Build an updated DTO for re-encryption.
-            let dto = NoteDTO(
-                id: noteID,
-                transcript: transcript,
-                createdAt: entity.createdAt,
-                category: category.rawValue,
-                latitude: entity.latitude,
-                longitude: entity.longitude,
-                locationName: entity.locationName,
-                todos: todos
-            )
-            entity.encryptedPayload = try? EncryptionService.encrypt(dto)
-
-            try bgContext.save()
-        }
-
-        // Re-sync the updated encrypted payload to Firebase.
-        await syncUpdateToFirebase(noteID: noteID, transcript: transcript,
-                                   category: category, todos: todos)
-    }
-
-    private func syncUpdateToFirebase(
-        noteID: UUID,
-        transcript: String,
-        category: NoteCategory,
-        todos: [TodoItem]
-    ) async {
-        // We need the entity's full data for the DTO — fetch from view context.
-        let request = NoteEntity.fetchRequest()
-        request.predicate = NSPredicate(format: "id == %@", noteID as CVarArg)
-        guard let entity = try? context.fetch(request).first else { return }
-
-        let dto = NoteDTO(
-            id: noteID,
-            transcript: transcript,
-            createdAt: entity.createdAt,
-            category: category.rawValue,
-            latitude: entity.latitude,
-            longitude: entity.longitude,
-            locationName: entity.locationName,
-            todos: todos
-        )
-
-        guard let payload = try? EncryptionService.encrypt(dto) else { return }
-
-        if NetworkMonitor.shared.isConnected {
-            do {
-                try await FirebaseSyncService.shared.uploadEncryptedNote(
-                    id: noteID, encryptedPayload: payload,
-                    category: category.rawValue, createdAt: dto.createdAt
-                )
-                // Mark as synced in Core Data.
-                let bgContext = PersistenceController.shared.newBackgroundContext()
-                await bgContext.perform {
-                    let req = NoteEntity.fetchRequest()
-                    req.predicate = NSPredicate(format: "id == %@", noteID as CVarArg)
-                    if let e = try? bgContext.fetch(req).first {
-                        e.isSyncedToCloud = true
-                        try? bgContext.save()
-                    }
-                }
-            } catch {
-                await SyncRetryQueue.shared.enqueue(
-                    id: noteID, payload: payload,
-                    category: category.rawValue, createdAt: dto.createdAt
-                )
+            if NetworkMonitor.shared.isConnected {
+                try? await FirebaseSyncService.shared.uploadNote(dto)
+                await markSynced(id: dto.id)
+            } else {
+                await SyncRetryQueue.shared.enqueue(dto)
             }
-        } else {
-            await SyncRetryQueue.shared.enqueue(
-                id: noteID, payload: payload,
-                category: category.rawValue, createdAt: dto.createdAt
-            )
         }
     }
+
+    // MARK: - Decryption (original feature)
 
     func decryptedDTO(for note: NoteEntity) -> NoteDTO? {
         guard let payload = note.encryptedPayload else { return nil }
         return try? EncryptionService.decrypt(payload, as: NoteDTO.self)
+    }
+
+    // MARK: - Helpers
+
+    private func buildDTO(from note: NoteEntity) -> NoteDTO? {
+        guard note.managedObjectContext != nil else { return nil }
+        return NoteDTO(
+            id:           note.id,
+            title:        note.displayTitle,
+            transcript:   note.transcript ?? "",
+            createdAt:    note.createdAt,
+            updatedAt:    note.updatedAt,
+            category:     note.category ?? "Other",
+            latitude:     note.latitude,
+            longitude:    note.longitude,
+            locationName: note.locationName,
+            todos:        note.todos
+        )
+    }
+
+    private func markSynced(id: UUID) async {
+        let bg = PersistenceController.shared.newBackgroundContext()
+        try? await bg.perform {
+            let req = NoteEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            if let e = try bg.fetch(req).first { e.isSyncedToCloud = true; try bg.save() }
+        }
     }
 }
 
@@ -202,3 +171,4 @@ extension NotesListViewModel: NSFetchedResultsControllerDelegate {
         }
     }
 }
+

@@ -1,18 +1,3 @@
-//
-//  AddNoteView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 01/07/26.
-//
-//
-//  AddNoteView.swift
-//  SmartNotes
-//
-//  Manual text entry path for creating a note (vs. the voice-recording
-//  path in RecordingView). Runs the same NLP extraction -> Reminders ->
-//  Core Data save -> encrypt -> Firebase sync pipeline so both paths stay
-//  in sync with each other.
-
 import SwiftUI
 import MapKit
 internal import CoreData
@@ -111,16 +96,13 @@ struct AddNoteView: View {
                                 } label: {
                                     HStack {
                                         Image(systemName: "plus.circle.fill")
-                                            .foregroundStyle(AppTheme.accent)
                                         Text("Add Location")
-                                            .foregroundStyle(AppTheme.accent)
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
-                                    .background(AppTheme.accent.opacity(0.1),
-                                                in: RoundedRectangle(cornerRadius: 10))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.glass)
+                                .tint(AppTheme.accent)
                             }
                         }
 
@@ -132,7 +114,7 @@ struct AddNoteView: View {
                             }
                             .foregroundStyle(AppTheme.recordingRed)
                             .padding(12)
-                            .background(AppTheme.recordingRed.opacity(0.1),
+                            .glassEffect(.regular.tint(AppTheme.recordingRed.opacity(0.35)),
                                         in: RoundedRectangle(cornerRadius: 10))
                         }
 
@@ -142,7 +124,7 @@ struct AddNoteView: View {
                         } label: {
                             HStack {
                                 if isSaving {
-                                    ProgressView().tint(AppTheme.background)
+                                    ProgressView()
                                 } else {
                                     Image(systemName: "square.and.arrow.down.fill")
                                 }
@@ -151,14 +133,9 @@ struct AddNoteView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            .background(
-                                transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
-                                    ? AppTheme.saveAmber.opacity(0.3)
-                                    : AppTheme.saveAmber,
-                                in: RoundedRectangle(cornerRadius: 16)
-                            )
-                            .foregroundStyle(AppTheme.background)
                         }
+                        .buttonStyle(.glassProminent)
+                        .tint(AppTheme.saveAmber)
                         .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                     }
                     .padding(16)
@@ -166,7 +143,6 @@ struct AddNoteView: View {
             }
             .navigationTitle("New Note")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppTheme.surface, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -226,7 +202,13 @@ struct AddNoteView: View {
                         if !isXPC { print("Reminders: \(error)") }
                     }
                 }
-                let dto = NoteDTO(id: UUID(), transcript: text, createdAt: Date(),
+                let rawTitle = text.components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+                    .first?.trimmingCharacters(in: .whitespaces) ?? ""
+                let title = rawTitle.isEmpty ? "Note \(Date().formatted(date: .abbreviated,time:.shortened))" : String(rawTitle.prefix(60))
+
+                let now = Date()
+
+                let dto = NoteDTO(id: UUID(),title: title, transcript: text, createdAt: now,updatedAt: now,
                                   category: category.rawValue,
                                   latitude: location?.coordinate.latitude ?? 0,
                                   longitude: location?.coordinate.longitude ?? 0,
@@ -248,19 +230,20 @@ struct AddNoteView: View {
         let ctx = PersistenceController.shared.newBackgroundContext()
         try await ctx.performAndSave {
             let e = NoteEntity(context: ctx)
-            e.id = dto.id; e.transcript = dto.transcript; e.createdAt = dto.createdAt
+            e.id = dto.id; e.title = dto.title; e.transcript = dto.transcript; e.createdAt = dto.createdAt
+            e.updatedAt = dto.updatedAt
             e.category = dto.category; e.latitude = dto.latitude; e.longitude = dto.longitude
             e.locationName = dto.locationName; e.todos = dto.todos
-            e.isSyncedToCloud = false; e.encryptedPayload = try? EncryptionService.encrypt(dto)
+            e.isSyncedToCloud = false; e.isSoftDeleted = false
+            e.encryptedPayload = try? EncryptionService.encrypt(dto)
         }
     }
 
     private func syncToFirebase(_ dto: NoteDTO) async {
-        guard let payload = try? EncryptionService.encrypt(dto) else { return }
+        //guard let payload = try? EncryptionService.encrypt(dto) else { return }
         if NetworkMonitor.shared.isConnected {
             do {
-                try await FirebaseSyncService.shared.uploadEncryptedNote(
-                    id: dto.id, encryptedPayload: payload, category: dto.category, createdAt: dto.createdAt)
+                try await FirebaseSyncService.shared.uploadNote(dto)
                 let ctx = PersistenceController.shared.newBackgroundContext()
                 await ctx.perform {
                     let req = NoteEntity.fetchRequest()
@@ -268,10 +251,10 @@ struct AddNoteView: View {
                     if let e = try? ctx.fetch(req).first { e.isSyncedToCloud = true; try? ctx.save() }
                 }
             } catch {
-                await SyncRetryQueue.shared.enqueue(id: dto.id, payload: payload, category: dto.category, createdAt: dto.createdAt)
+                await SyncRetryQueue.shared.enqueue(dto)
             }
         } else {
-            await SyncRetryQueue.shared.enqueue(id: dto.id, payload: payload, category: dto.category, createdAt: dto.createdAt)
+            await SyncRetryQueue.shared.enqueue(dto)
         }
     }
 }

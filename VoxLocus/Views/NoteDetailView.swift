@@ -1,137 +1,115 @@
-//
-//  NoteDetailView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-//  NoteDetailView.swift
-//  SmartNotes
-//
-
 import SwiftUI
-internal import CoreData
 
 struct NoteDetailView: View {
     @ObservedObject var note: NoteEntity
     @ObservedObject var viewModel: NotesListViewModel
     @Environment(\.dismiss) private var dismiss
-    @State private var showingEdit = false
 
-    private var isNoteValid: Bool {
-        !note.isDeleted && note.managedObjectContext != nil
-    }
+    @State private var showDeleteConfirm = false
+    @State private var showingEdit       = false
 
     var body: some View {
-        Group {
-            if isNoteValid {
-                noteContent
-            } else {
-                ContentUnavailableView(
-                    "Note Deleted",
-                    systemImage: "trash",
-                    description: Text("This note has been removed.")
-                )
+        ZStack {
+            AppTheme.background.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Header: category + date
+                        HStack {
+                            if let category = note.category {
+                                Label(category, systemImage: NoteCategory(rawValue: category)?.systemImage ?? "tag")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(AppTheme.categoryColor(for: category))
+                            }
+                            Spacer()
+                            Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+
+                        Text(note.displayTitle)
+                            .font(.title3.bold())
+                            .foregroundStyle(AppTheme.textPrimary)
+
+                        Divider().background(AppTheme.border)
+
+                        Text(note.transcript ?? "")
+                            .font(.body)
+                            .foregroundStyle(AppTheme.textPrimary)
+
+                        // Location
+                        if let location = note.locationName, !location.isEmpty {
+                            Label(location, systemImage: "mappin.and.ellipse")
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                    }
+                    .padding()
+                    .themedCard()
+
+                    // To-Dos (original feature, unchanged)
+                    if !note.todos.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("To-Dos (synced to Reminders)")
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.textPrimary)
+                            ForEach(note.todos) { todo in
+                                HStack {
+                                    Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(todo.isCompleted ? AppTheme.success : AppTheme.textSecondary)
+                                    Text(todo.text)
+                                        .foregroundStyle(AppTheme.textPrimary)
+                                }
+                            }
+                        }
+                        .padding()
+                        .themedCard()
+                    }
+
+                    // Sync status
+                    Label(
+                        note.isSyncedToCloud ? "Synced & encrypted in cloud" : "Pending encrypted sync",
+                        systemImage: note.isSyncedToCloud ? "lock.icloud.fill" : "icloud.and.arrow.up"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(note.isSyncedToCloud ? AppTheme.success : AppTheme.saveAmber)
+
+                    // Delete
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Delete Note", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.glass)
+                    .tint(AppTheme.recordingRed)
+                    .padding(.top, 4)
+                }
+                .padding()
             }
         }
         .navigationTitle("Note")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showingEdit = true
-                } label: {
-                    Image(systemName: "pencil")
-                }
-                .disabled(!isNoteValid)
+                Button("Edit") { showingEdit = true }
+                    .tint(AppTheme.accent)
             }
         }
         .sheet(isPresented: $showingEdit) {
             EditNoteView(note: note, viewModel: viewModel)
-                .environmentObject(LocationGeofenceService())
         }
-        .onChange(of: note.isDeleted) { _, deleted in
-            if deleted { dismiss() }
-        }
-    }
-
-    private var noteContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-
-                // MARK: Header
-                HStack {
-                    if let category = note.category,
-                       let cat = NoteCategory(rawValue: category) {
-                        Label(cat.rawValue, systemImage: cat.systemImage)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.blue)
-                    }
-                    Spacer()
-                    // Safely unwrap createdAt — Core Data stores it as
-                    // optional at the ObjC layer even if Swift says non-optional.
-                    if note.managedObjectContext != nil {
-                        Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                // MARK: Transcript
-                Text(note.transcript ?? "No transcript available.")
-                    .font(.body)
-
-                // MARK: Location
-                if let location = note.locationName, !location.isEmpty {
-                    Label(location, systemImage: "mappin.and.ellipse")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                // MARK: To-Dos
-                if !note.todos.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("To-Dos (synced to Reminders)")
-                            .font(.headline)
-                        ForEach(note.todos) { todo in
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: todo.isCompleted
-                                      ? "checkmark.circle.fill"
-                                      : "circle")
-                                    .foregroundStyle(todo.isCompleted ? .green : .secondary)
-                                Text(todo.text)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(
-                        Color(.secondarySystemBackground),
-                        in: RoundedRectangle(cornerRadius: 12)
-                    )
-                }
-
-                // MARK: Sync status
-                Label(
-                    note.isSyncedToCloud
-                        ? "Synced & encrypted in cloud"
-                        : "Pending encrypted sync",
-                    systemImage: note.isSyncedToCloud
-                        ? "lock.icloud.fill"
-                        : "icloud.and.arrow.up"
-                )
-                .font(.caption)
-                .foregroundStyle(note.isSyncedToCloud ? .green : .orange)
-
-                // MARK: Delete
-                Button(role: .destructive) {
-                    viewModel.delete(note)
-                    dismiss()
-                } label: {
-                    Label("Delete Note", systemImage: "trash")
-                }
-                .padding(.top, 12)
+        .confirmationDialog("Delete this note?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                viewModel.delete(note)
+                dismiss()
             }
-            .padding()
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will remove the note from this device and the cloud.")
         }
     }
 }

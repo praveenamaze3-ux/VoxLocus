@@ -1,46 +1,38 @@
-//
-//  AppTheme.swift
-//  
-//
-//  Created by Praveen V on 02/07/26.
-//
-
 import SwiftUI
-
 enum AppTheme {
 
-    // MARK: - Core palette
+    // MARK: - Core palette (Indigo / Blue)
 
-    /// Deep midnight indigo — primary background
-    static let background     = Color(hex: "#0D0F2B")
+    /// Deep indigo-navy — primary background
+    static let background     = Color(hex: "#0A0E1F")
     /// Slightly lifted indigo — card / list row background
-    static let surface        = Color(hex: "#161938")
+    static let surface        = Color(hex: "#131A33")
     /// Raised card surface for sheets and modals
-    static let surfaceRaised  = Color(hex: "#1F2347")
-    /// Electric violet — primary brand accent (buttons, active states)
-    static let accent         = Color(hex: "#7C5CFC")
+    static let surfaceRaised  = Color(hex: "#1B2545")
+    /// Vivid indigo-blue — primary brand accent (buttons, active states)
+    static let accent         = Color(hex: "#5E6AD2")
     /// Coral red — recording active state
-    static let recordingRed   = Color(hex: "#FF5F6D")
+    static let recordingRed   = Color(hex: "#FF6B5B")
     /// Warm amber — Save action
-    static let saveAmber      = Color(hex: "#FFC947")
-    /// Teal — success / synced
-    static let success        = Color(hex: "#4ECDC4")
-    /// Soft lavender — secondary text
-    static let textSecondary  = Color(hex: "#9B98C4")
-    /// Near-white warm cream — primary text
-    static let textPrimary    = Color(hex: "#F0EEFF")
-    /// Muted surface border
-    static let border         = Color(hex: "#2A2D5A")
+    static let saveAmber      = Color(hex: "#F5B942")
+    /// Emerald — success / synced (kept distinct from the indigo accent)
+    static let success        = Color(hex: "#34D399")
+    /// Muted blue-gray — secondary text
+    static let textSecondary  = Color(hex: "#9BA4C4")
+    /// Cool off-white — primary text
+    static let textPrimary    = Color(hex: "#F1F3FC")
+    /// Muted indigo-gray border
+    static let border         = Color(hex: "#2A3358")
 
     // MARK: - Semantic shorthands
 
     static let categoryColors: [String: Color] = [
-        "Personal":  Color(hex: "#7C5CFC"),
-        "Work":      Color(hex: "#4ECDC4"),
-        "Shopping":  Color(hex: "#FFC947"),
-        "Health":    Color(hex: "#FF5F6D"),
-        "Ideas":     Color(hex: "#A78BFA"),
-        "Other":     Color(hex: "#9B98C4")
+        "Personal":  Color(hex: "#5E6AD2"),
+        "Work":      Color(hex: "#4AA8D8"),
+        "Shopping":  Color(hex: "#F5B942"),
+        "Health":    Color(hex: "#FF6B5B"),
+        "Ideas":     Color(hex: "#D4C86A"),
+        "Other":     Color(hex: "#9BA4C4")
     ]
 
     static func categoryColor(for category: String) -> Color {
@@ -49,7 +41,7 @@ enum AppTheme {
 }
 
 // MARK: - Hex color initialiser
-
+//extract RGB patterns via bit shifting .
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -66,16 +58,19 @@ extension Color {
     }
 }
 
-// MARK: - Reusable themed card modifier
+// MARK: - Reusable themed card modifier (Liquid Glass)
 
 struct ThemedCard: ViewModifier {
     var cornerRadius: CGFloat = 14
     func body(content: Content) -> some View {
         content
-            .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .glassEffect(
+                .regular.tint(AppTheme.surface.opacity(0.55)),
+                in: RoundedRectangle(cornerRadius: cornerRadius)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(AppTheme.border, lineWidth: 0.5)
+                    .strokeBorder(AppTheme.border.opacity(0.7), lineWidth: 0.5)
             )
     }
 }

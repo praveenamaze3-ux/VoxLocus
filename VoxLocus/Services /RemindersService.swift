@@ -1,9 +1,3 @@
-//
-//  RemindersService.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
 
 import EventKit
 
@@ -16,7 +10,6 @@ actor RemindersService {
     func requestAccess() async throws -> Bool {
         try await store.requestFullAccessToReminders()
     }
-    
     func createChecklist(for todos: [TodoItem], noteTitle: String) async throws -> [TodoItem] {
         guard try await requestAccess() else {
             throw RemindersError.accessDenied
@@ -61,3 +54,4 @@ actor RemindersService {
         var errorDescription: String? { "Reminders access was denied. Enable it in Settings to auto-create checklists." }
     }
 }
+

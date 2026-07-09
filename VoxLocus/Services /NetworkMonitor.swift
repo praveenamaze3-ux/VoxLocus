@@ -1,10 +1,3 @@
-//
-//  NetworkMonitor.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-
 import Network
 import Combine
 
@@ -20,7 +13,7 @@ final class NetworkMonitor: ObservableObject {
     private let queue = DispatchQueue(label: "com.smartnotes.networkmonitor")
 
     private init() {
-        monitor.pathUpdateHandler = { [weak self] path in
+        monitor.pathUpdateHandler = { [weak self] path in //Call back closure .
             guard let self else { return }
                         let connected = path.status == .satisfied
                         let expensive = path.isExpensive

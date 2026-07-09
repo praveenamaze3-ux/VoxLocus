@@ -1,257 +1,222 @@
-//
-//  RecordingView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-//
-//  RecordingView.swift
-//  SmartNotes
-
 import SwiftUI
 
 struct RecordingView: View {
     @EnvironmentObject var locationService: LocationGeofenceService
     @EnvironmentObject var networkMonitor: NetworkMonitor
-    @StateObject private var vm = RecordingViewModel(locationService: LocationGeofenceService())
+    @StateObject private var viewModel: RecordingViewModel
+
+    init() {
+        _viewModel = StateObject(wrappedValue: RecordingViewModel(locationService: LocationGeofenceService()))
+    }
+
+    private var statusText: String {
+        if viewModel.isRecording {
+            return viewModel.isPaused ? "Paused" : "Listening…"
+        }
+        if viewModel.pendingTranscript != nil {
+            return "Tap Save to store this note"
+        }
+        return "Tap Start to begin"
+    }
 
     var body: some View {
         ZStack {
-            // Full-screen background
             AppTheme.background.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
+            VStack(spacing: 20) {
                 Spacer()
-                waveformOrb
-                Spacer()
+
+                MicWaveIndicator(isActive: viewModel.isRecording && !viewModel.isPaused)
+
+                Text(statusText)
+                    .font(.title3)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .padding(.horizontal, 32)
+                    .animation(.easeInOut, value: statusText)
+
                 transcriptBox
+
+                if !networkMonitor.isConnected {
+                    Label("Offline — note will sync later", systemImage: "wifi.slash")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.saveAmber)
+                }
+
                 Spacer()
-                controlPanel
-                Spacer(minLength: 16)
-            }
-            .padding(.horizontal, 24)
-        }
-        .onAppear {
-            vm.attach(locationService: locationService)
-            vm.start()
-        }
-    }
 
-    // MARK: - Header
+                VStack(spacing: 14) {
+                    GlassEffectContainer(spacing: 14) {
+                        HStack(spacing: 14) {
+                            Button {
+                                if viewModel.isRecording {
+                                    viewModel.stop()
+                                } else {
+                                    viewModel.start()
+                                }
+                            } label: {
+                                Label(viewModel.isRecording ? "Stop" : "Start",
+                                      systemImage: viewModel.isRecording ? "stop.fill" : "mic.fill")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .tint(viewModel.isRecording ? AppTheme.recordingRed : AppTheme.accent)
+                            .disabled(viewModel.isProcessing)
 
-    private var header: some View {
-        VStack(spacing: 4) {
-            Text("VoxLocus")
-                .font(.system(size: 28, weight: .black, design: .rounded))
-                .foregroundStyle(
-                    LinearGradient(colors: [AppTheme.accent, AppTheme.recordingRed],
-                                   startPoint: .leading, endPoint: .trailing)
-                )
-            Text(stateLabel)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.textSecondary)
-                .animation(.easeInOut, value: vm.recordingState)
-        }
-        .padding(.top, 16)
-    }
+                            Button {
+                                if viewModel.isPaused {
+                                    viewModel.resume()
+                                } else {
+                                    viewModel.pause()
+                                }
+                            } label: {
+                                Label(viewModel.isPaused ? "Resume" : "Pause",
+                                      systemImage: viewModel.isPaused ? "play.fill" : "pause.fill")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            }
+                            .buttonStyle(.glass)
+                            .tint(AppTheme.saveAmber)
+                            .disabled(!viewModel.isRecording || viewModel.isProcessing)
+                        }
 
-    private var stateLabel: String {
-        switch vm.recordingState {
-        case .idle:       return "TAP START TO RECORD"
-        case .recording:  return "● RECORDING"
-        case .paused:     return "⏸ PAUSED"
-        case .processing: return "⚙ PROCESSING…"
-        case .saved:      return "✓ SAVED"
-        }
-    }
+                        if viewModel.pendingTranscript != nil {
+                            Button {
+                                viewModel.save()
+                            } label: {
+                                Label("Save Note", systemImage: "checkmark.circle.fill")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            }
+                            .buttonStyle(.glassProminent)
+                            .tint(AppTheme.success)
+                            .disabled(viewModel.isProcessing)
+                        }
+                    }
 
-    // MARK: - Waveform orb
-
-    private var waveformOrb: some View {
-        ZStack {
-            // Outer glow ring
-            Circle()
-                .fill(orbGlowColor.opacity(0.12))
-                .frame(width: 200, height: 200)
-                .scaleEffect(vm.recordingState == .recording ? 1.15 : 1.0)
-                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true),
-                           value: vm.recordingState)
-
-            // Middle ring
-            Circle()
-                .fill(orbGlowColor.opacity(0.22))
-                .frame(width: 160, height: 160)
-                .scaleEffect(vm.recordingState == .recording ? 1.08 : 1.0)
-                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true),
-                           value: vm.recordingState)
-
-            // Core
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [orbGlowColor, orbGlowColor.opacity(0.6)],
-                        center: .center, startRadius: 10, endRadius: 60
-                    )
-                )
-                .frame(width: 120, height: 120)
-
-            Image(systemName: orbIcon)
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.white)
-                .symbolEffect(.pulse, isActive: vm.recordingState == .recording)
-        }
-        .animation(.spring(duration: 0.4), value: vm.recordingState)
-    }
-
-    private var orbGlowColor: Color {
-        switch vm.recordingState {
-        case .recording:  return AppTheme.recordingRed
-        case .paused:     return AppTheme.saveAmber
-        case .saved:      return AppTheme.success
-        case .processing: return AppTheme.accent
-        default:          return AppTheme.accent
-        }
-    }
-
-    private var orbIcon: String {
-        switch vm.recordingState {
-        case .recording:  return "waveform"
-        case .paused:     return "pause.fill"
-        case .processing: return "gearshape.fill"
-        case .saved:      return "checkmark"
-        default:          return "mic.fill"
-        }
-    }
-
-    // MARK: - Transcript box
-
-    private var transcriptBox: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(vm.liveTranscript.isEmpty
-                 ? (vm.recordingState == .idle ? "Tap Start to begin…" : "Listening…")
-                 : vm.liveTranscript)
-                .font(.body)
-                .foregroundStyle(vm.liveTranscript.isEmpty
-                                 ? AppTheme.textSecondary
-                                 : AppTheme.textPrimary)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, minHeight: 90, alignment: .topLeading)
-                .animation(.easeInOut, value: vm.liveTranscript)
-
-            if let saved = vm.lastSavedNote {
-                Divider().background(AppTheme.border)
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppTheme.success)
-                    Text("Saved as \(saved.category)")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.success)
-                    Spacer()
-                    if !saved.todos.isEmpty {
-                        Label("\(saved.todos.count) reminder(s)", systemImage: "checklist")
-                            .font(.caption2)
+                    if viewModel.isProcessing {
+                        Label("Processing…", systemImage: "hourglass")
+                            .font(.caption)
                             .foregroundStyle(AppTheme.textSecondary)
                     }
                 }
-                Label("Open Notes tab to add a location", systemImage: "mappin.and.ellipse")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.textSecondary)
-            }
+                .padding(.horizontal, 32)
 
-            if let error = vm.lastError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.recordingRed)
-            }
+                if let saved = viewModel.lastSavedNote {
+                    savedSummary(saved)
+                }
 
-            if !networkMonitor.isConnected {
-                Label("Offline — will sync later", systemImage: "wifi.slash")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.saveAmber)
+                if let error = viewModel.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.recordingRed)
+                        .padding(.horizontal, 32)
+                }
+
+                Spacer()
             }
+            .padding(.bottom, 24)
         }
-        .padding(16)
+        .onAppear {
+            viewModel.attach(locationService: locationService)
+        }
+    }
+
+    /// Live transcript, shown below the mic as speech is captured — stays
+    /// visible after Stop so the user can review it before tapping Save.
+    private var transcriptBox: some View {
+        ScrollView {
+            Text(viewModel.liveTranscript.isEmpty ? "Your speech will appear here…" : viewModel.liveTranscript)
+                .font(.body)
+                .foregroundStyle(viewModel.liveTranscript.isEmpty ? AppTheme.textSecondary : AppTheme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .animation(.easeInOut, value: viewModel.liveTranscript)
+        }
+        .frame(maxHeight: 160)
         .themedCard()
+        .padding(.horizontal, 32)
     }
 
-    // MARK: - Control panel
-
-    private var controlPanel: some View {
-        VStack(spacing: 16) {
-
-            // Primary row: Start / Stop / Resume
-            HStack(spacing: 16) {
-                switch vm.recordingState {
-                case .idle, .saved:
-                    // START
-                    controlButton(label: "Start", icon: "mic.fill",
-                                  color: AppTheme.accent) { vm.start() }
-
-                case .recording:
-                    // STOP
-                    controlButton(label: "Stop", icon: "stop.fill",
-                                  color: AppTheme.recordingRed) { vm.stop() }
-
-                case .paused:
-                    // RESUME
-                    controlButton(label: "Resume", icon: "mic.fill",
-                                  color: AppTheme.accent) { vm.resume() }
-                    // DISCARD
-                    controlButton(label: "Discard", icon: "trash",
-                                  color: AppTheme.textSecondary.opacity(0.6)) { vm.discard() }
-
-                case .processing:
-                    ProgressView()
-                        .tint(AppTheme.accent)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-
-            // Save button — only when there's content to save
-            if (vm.recordingState == .paused || vm.recordingState == .recording),
-               !vm.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button {
-                    vm.save()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "square.and.arrow.down.fill")
-                        Text("Save Note")
-                            .font(.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(colors: [AppTheme.saveAmber, AppTheme.saveAmber.opacity(0.8)],
-                                       startPoint: .leading, endPoint: .trailing),
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
-                    .foregroundStyle(Color(hex: "#0D0F2B"))
-                }
-            }
-        }
-        .padding(.bottom, 8)
-    }
-
-    private func controlButton(label: String, icon: String, color: Color,
-                                action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .semibold))
-                Text(label)
+    private func savedSummary(_ note: NoteDTO) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Saved as \(note.category)", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(AppTheme.success)
+            if !note.todos.isEmpty {
+                Text("\(note.todos.count) reminder(s) created:")
                     .font(.caption.bold())
+                    .foregroundStyle(AppTheme.textPrimary)
+                ForEach(note.todos) { todo in
+                    Text("• \(todo.text)").font(.caption)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .background(color.opacity(0.18), in: RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(color.opacity(0.5), lineWidth: 1)
-            )
-            .foregroundStyle(color)
         }
-        .animation(.spring(duration: 0.3), value: vm.recordingState)
+        .padding()
+        .themedCard()
+        .padding(.horizontal, 32)
+    }
+}
+
+// MARK: - Dotted Wave Ring (replaces three-circle overlay)
+
+/// 16 dots arranged in a ring. While actively capturing, each dot pulses
+/// easeInOut with a per-dot stagger, giving a travelling-wave appearance.
+/// Paused sessions freeze the animation to visually distinguish from Stopped.
+struct MicWaveIndicator: View {
+    let isActive: Bool
+    @State private var animating = false
+
+    private let dotCount     = 16
+    private let ringRadius: CGFloat = 68
+    private let dotSize:    CGFloat = 7
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<dotCount, id: \.self) { i in
+                let angle  = Angle(degrees: Double(i) / Double(dotCount) * 360)
+                let delay  = Double(i) / Double(dotCount) * 0.7
+
+                Circle()
+                    .fill(AppTheme.recordingRed.opacity(isActive ? 0.85 : 0.20))
+                    .frame(width: dotSize, height: dotSize)
+                    .scaleEffect(animating ? 1.6 : 0.7)
+                    .animation(
+                        isActive
+                            ? .easeInOut(duration: 0.7)
+                                .repeatForever(autoreverses: true)
+                                .delay(delay)
+                            : .easeInOut(duration: 0.25),
+                        value: animating
+                    )
+                    .offset(
+                        x: ringRadius * CGFloat(cos(angle.radians)),
+                        y: ringRadius * CGFloat(sin(angle.radians))
+                    )
+            }
+
+            // Mic icon at centre
+            Image(systemName: "mic.fill")
+                .font(.system(size: 44))
+                .foregroundStyle(isActive ? AppTheme.recordingRed : AppTheme.textSecondary)
+                .scaleEffect(isActive ? 1.06 : 1.0)
+                .animation(
+                    isActive
+                        ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                        : .easeInOut(duration: 0.25),
+                    value: isActive
+                )
+        }
+        .frame(
+            width:  (ringRadius + dotSize) * 2 + 10,
+            height: (ringRadius + dotSize) * 2 + 10
+        )
+        .onAppear { if isActive { animating = true } }
+        .onChange(of: isActive) { _, newValue in animating = newValue }
     }
 }
 

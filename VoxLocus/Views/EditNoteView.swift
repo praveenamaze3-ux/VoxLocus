@@ -1,20 +1,3 @@
-//
-//  EditNoteView.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 01/07/26.
-//
-//
-//  EditNoteView.swift
-//  SmartNotes
-//
-//  Full editing screen for an existing note. Lets the user:
-//    • Edit the transcript text
-//    • Change the category
-//    • Toggle todo completion / add / delete todos
-//    • Re-run NLP extraction on the edited text
-//  On save: re-encrypts the payload, updates Core Data, and re-syncs to Firebase.
-//
 import SwiftUI
 import MapKit
 
@@ -130,13 +113,11 @@ struct EditNoteView: View {
                                         Image(systemName: "plus.circle.fill")
                                         Text("Add Location")
                                     }
-                                    .foregroundStyle(AppTheme.accent)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 10)
-                                    .background(AppTheme.accent.opacity(0.1),
-                                                in: RoundedRectangle(cornerRadius: 10))
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.glass)
+                                .tint(AppTheme.accent)
                             }
                         }
 
@@ -200,25 +181,22 @@ struct EditNoteView: View {
                             }
                             .foregroundStyle(AppTheme.recordingRed)
                             .padding(12)
-                            .background(AppTheme.recordingRed.opacity(0.1),
+                            .glassEffect(.regular.tint(AppTheme.recordingRed.opacity(0.35)),
                                         in: RoundedRectangle(cornerRadius: 10))
                         }
 
                         // MARK: Save button
                         Button { saveEdits() } label: {
                             HStack {
-                                if isSaving { ProgressView().tint(AppTheme.background) }
+                                if isSaving { ProgressView() }
                                 else { Image(systemName: "checkmark.circle.fill") }
                                 Text(isSaving ? "Saving…" : "Save Changes").font(.headline)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            .background(
-                                isSaving ? AppTheme.accent.opacity(0.4) : AppTheme.accent,
-                                in: RoundedRectangle(cornerRadius: 16)
-                            )
-                            .foregroundStyle(.white)
                         }
+                        .buttonStyle(.glassProminent)
+                        .tint(AppTheme.accent)
                         .disabled(isSaving || transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(16)
@@ -226,7 +204,6 @@ struct EditNoteView: View {
             }
             .navigationTitle("Edit Note")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppTheme.surface, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .dismissWhenDeleted(note)
             .toolbar {
@@ -281,12 +258,18 @@ struct EditNoteView: View {
         let t = transcript; let c = selectedCategory
         let td = todos.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let loc = selectedLocation
+        let rawTitle = t.components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
+            .first?.trimmingCharacters(in: .whitespaces) ?? ""
+        let newTitle = rawTitle.isEmpty
+            ? (note.title ?? "Note \(Date().formatted(date: .abbreviated, time: .shortened))")
+            : String(rawTitle.prefix(60))
         Task {
             do {
                 locationService.removeGeofence(noteID: note.id)
-                try await viewModel.updateNote(note, transcript: t, category: c, todos: td, location: loc)
+                try await viewModel.saveEdits(note: note, newTitle: newTitle, newTranscript: t,
+                                               newCategory: c.rawValue, newTodos: td)
                 if let loc {
-                    let dto = NoteDTO(id: note.id, transcript: t, createdAt: note.safeCreatedAt,
+                    let dto = NoteDTO(id: note.id, title:note.title!, transcript: t, createdAt: note.safeCreatedAt,updatedAt: note.updatedAt,
                                      category: c.rawValue,
                                      latitude: loc.coordinate.latitude,
                                      longitude: loc.coordinate.longitude,

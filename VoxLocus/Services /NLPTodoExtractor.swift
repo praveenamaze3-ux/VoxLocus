@@ -1,26 +1,14 @@
-//
-//  NLPTodoExtractor.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-
 import NaturalLanguage
 import Foundation
 
 struct NLPTodoExtractor {
-
-    /// Verb-led cue phrases that strongly suggest an action item.
     private static let actionCues = [
         "remind me to", "need to", "have to", "should", "must",
         "don't forget to", "remember to", "todo", "to-do", "buy",
         "call", "email", "schedule", "book", "pick up", "pay",
         "send", "finish", "submit", "follow up", "plan to", "make sure to"
     ]
-
-    /// Splits transcript into sentences, scores each for "action-ness", and
-    /// returns cleaned-up todo strings for anything above the threshold.
-    nonisolated static func extractTodos(from transcript: String) async -> [TodoItem] {
+    static func extractTodos(from transcript: String) async -> [TodoItem] {
         await Task.detached(priority: .userInitiated) {
             guard !transcript.isEmpty else { return [] }
 
@@ -43,16 +31,12 @@ struct NLPTodoExtractor {
         }.value
     }
 
-    nonisolated private static func isActionable(_ sentence: String) -> Bool {
+    private static func isActionable(_ sentence: String) -> Bool {
         let lower = sentence.lowercased()
-
-        // 1. Cue-phrase heuristic.
         if actionCues.contains(where: { lower.contains($0) }) {
             return true
         }
 
-        // 2. Grammatical heuristic: sentence starts with (or strongly leads
-        // with) a base-form verb, e.g. "Buy milk." / "Call the dentist."
         let tagger = NLTagger(tagSchemes: [.lexicalClass])
         tagger.string = sentence
         var startsWithVerb = false
@@ -60,12 +44,11 @@ struct NLPTodoExtractor {
             if range.lowerBound == sentence.startIndex, tag == .verb {
                 startsWithVerb = true
             }
-            return false // only need the first token
-        }
+            return false         }
         return startsWithVerb
     }
 
-    nonisolated private static func cleanedTodoText(from sentence: String) -> String {
+    private static func cleanedTodoText(from sentence: String) -> String {
         var text = sentence
         for cue in actionCues {
             if let range = text.range(of: cue, options: [.caseInsensitive]) {
@@ -75,10 +58,7 @@ struct NLPTodoExtractor {
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
             .prefix(1).uppercased() + text.trimmingCharacters(in: .whitespacesAndNewlines).dropFirst()
     }
-
-    /// Very lightweight category classifier based on keyword matching —
-    /// swap for an NLModel / Core ML classifier later if you want it learned.
-    nonisolated static func suggestCategory(for transcript: String) -> NoteCategory {
+    static func suggestCategory(for transcript: String) -> NoteCategory {
         let lower = transcript.lowercased()
         if ["buy", "store", "grocery", "shop", "purchase"].contains(where: lower.contains) { return .shopping }
         if ["meeting", "deadline", "project", "client", "boss", "office"].contains(where: lower.contains) { return .work }
@@ -88,3 +68,4 @@ struct NLPTodoExtractor {
         return .other
     }
 }
+
