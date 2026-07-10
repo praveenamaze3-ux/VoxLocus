@@ -1,6 +1,7 @@
 import Foundation
 internal import CoreData
 import Combine
+import FirebaseAuth
 
 @MainActor
 final class NotesListViewModel: NSObject, ObservableObject {
@@ -23,14 +24,27 @@ final class NotesListViewModel: NSObject, ObservableObject {
         super.init()
         configureFetchedResultsController()
         observeLocationSuggestions()
+        observeAuthChanges()
     }
 
     // MARK: - FRC
 
+    /// Rebuilds the fetch scoped to the currently signed-in account. Notes
+    /// are stored in one shared local SQLite store, so without this filter
+    /// switching accounts on the same device would show the previous
+    /// account's notes.
     private func configureFetchedResultsController() {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            notes = []
+            return
+        }
+        migrateOrphanedNotes(toOwner: uid)
+
         let request = NoteEntity.fetchRequest()
-        // Exclude soft-deleted notes.
-        request.predicate = NSPredicate(format: "isSoftDeleted == NO OR isSoftDeleted == nil")
+        // Exclude soft-deleted notes and notes owned by other accounts.
+        request.predicate = NSPredicate(
+            format: "(isSoftDeleted == NO OR isSoftDeleted == nil) AND ownerUID == %@", uid
+        )
         request.sortDescriptors = [NSSortDescriptor(keyPath: \NoteEntity.createdAt, ascending: false)]
 
         fetchedResultsController = NSFetchedResultsController(
@@ -44,6 +58,31 @@ final class NotesListViewModel: NSObject, ObservableObject {
             try fetchedResultsController.performFetch()
             notes = fetchedResultsController.fetchedObjects ?? []
         } catch { print("⚠️ Fetch error: \(error)") }
+    }
+
+    /// One-time claim of notes created before per-account scoping existed
+    /// (`ownerUID == nil`), attributing them to whichever account is signed
+    /// in the first time this runs. Never reassigns a note that already has
+    /// an owner, so it can't leak notes between two real accounts.
+    private func migrateOrphanedNotes(toOwner uid: String) {
+        let request = NoteEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "ownerUID == nil")
+        guard let orphans = try? context.fetch(request), !orphans.isEmpty else { return }
+        for note in orphans { note.ownerUID = uid }
+        PersistenceController.shared.saveContext(context)
+    }
+
+    /// Defensive: re-scope the fetch if the signed-in account changes while
+    /// this view model is alive, rather than relying solely on it being torn
+    /// down and recreated by the AuthView ⇄ ContentView switch.
+    private func observeAuthChanges() {
+        AuthService.shared.$currentUser
+            .map { $0?.uid }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.configureFetchedResultsController() }
+            .store(in: &cancellables)
     }
 
     private func observeLocationSuggestions() {

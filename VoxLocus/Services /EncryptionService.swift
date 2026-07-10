@@ -1,18 +1,3 @@
-//
-//  EncryptionService.swift
-//  VoxLocus
-//
-//  Created by Praveen V on 30/06/26.
-//
-// AES-GCM not only encrypts but also ensures it isnt tampered with.
-//
-//  EncryptionService.swift
-//  VoxLocus
-//
-//  Encrypts note payloads with AES-GCM (CryptoKit) before they touch
-//  the network or Firebase. The symmetric key lives only in the device
-//  Keychain — it is never uploaded.
-//
 
 import CryptoKit
 import Security

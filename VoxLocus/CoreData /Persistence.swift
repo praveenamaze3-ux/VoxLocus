@@ -90,6 +90,7 @@ final class PersistenceController {
             // `setDeleted:`, which Core Data never synthesizes for the override).
             attr("isSoftDeleted",    .booleanAttributeType, optional: false, renamedFrom: "isDeleted"),
             attr("todosJSON",        .stringAttributeType),
+            attr("ownerUID",         .stringAttributeType),           // NEW: scopes notes to the signed-in account
         ]
         model.entities = [note]
         return model

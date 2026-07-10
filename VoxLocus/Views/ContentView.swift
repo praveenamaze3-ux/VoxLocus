@@ -42,8 +42,11 @@ struct AccountView: View {
                 }
                 .listRowBackground(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.clear)
-                        .glassEffect(.regular.tint(AppTheme.surface.opacity(0.55)), in: RoundedRectangle(cornerRadius: 14))
+                        .fill(AppTheme.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(AppTheme.border, lineWidth: 0.5)
+                        )
                 )
 
                 Section {
@@ -54,8 +57,11 @@ struct AccountView: View {
                 }
                 .listRowBackground(
                     RoundedRectangle(cornerRadius: 14)
-                        .fill(Color.clear)
-                        .glassEffect(.regular.tint(AppTheme.surface.opacity(0.55)), in: RoundedRectangle(cornerRadius: 14))
+                        .fill(AppTheme.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(AppTheme.border, lineWidth: 0.5)
+                        )
                 )
             }
             .scrollContentBackground(.hidden)

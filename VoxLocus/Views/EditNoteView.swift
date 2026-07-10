@@ -181,8 +181,11 @@ struct EditNoteView: View {
                             }
                             .foregroundStyle(AppTheme.recordingRed)
                             .padding(12)
-                            .glassEffect(.regular.tint(AppTheme.recordingRed.opacity(0.35)),
-                                        in: RoundedRectangle(cornerRadius: 10))
+                            .background(AppTheme.recordingRed.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(AppTheme.recordingRed.opacity(0.4), lineWidth: 0.5)
+                            )
                         }
 
                         // MARK: Save button

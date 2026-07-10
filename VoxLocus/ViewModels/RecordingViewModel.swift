@@ -3,6 +3,7 @@
 import Foundation
 internal import CoreData
 import Combine
+import FirebaseAuth
 internal import _LocationEssentials
 
 @MainActor
@@ -176,6 +177,7 @@ final class RecordingViewModel: ObservableObject {
             entity.todos = dto.todos
             entity.isSyncedToCloud = false
             entity.isSoftDeleted = false
+            entity.ownerUID = Auth.auth().currentUser?.uid
             entity.encryptedPayload = try? EncryptionService.encrypt(dto)
             try bgContext.save()
         }

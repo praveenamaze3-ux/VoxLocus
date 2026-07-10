@@ -19,9 +19,15 @@ struct RecordingView: View {
         return "Tap Start to begin"
     }
 
+    /// True only while actively capturing (not paused) — drives the ambient
+    /// glow/blur and the transcript box's recording glow.
+    private var recordingActive: Bool { viewModel.isRecording && !viewModel.isPaused }
+
     var body: some View {
         ZStack {
             AppTheme.background.ignoresSafeArea()
+            AmbientRecordingGlow(isActive: recordingActive)
+                .ignoresSafeArea()
 
             VStack(spacing: 20) {
                 Spacer()
@@ -33,6 +39,7 @@ struct RecordingView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(AppTheme.textSecondary)
                     .padding(.horizontal, 32)
+                    .padding(.bottom, 10)
                     .animation(.easeInOut, value: statusText)
 
                 transcriptBox
@@ -139,7 +146,15 @@ struct RecordingView: View {
         }
         .frame(maxHeight: 160)
         .themedCard()
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(AppTheme.recordingRed.opacity(recordingActive ? 0.6 : 0), lineWidth: 1.5)
+        )
+        .shadow(color: AppTheme.recordingRed.opacity(recordingActive ? 0.35 : 0),
+                radius: recordingActive ? 16 : 0)
+        .animation(.easeInOut(duration: 0.5), value: recordingActive)
         .padding(.horizontal, 32)
+        .padding(.top, 34)
     }
 
     private func savedSummary(_ note: NoteDTO) -> some View {
@@ -162,61 +177,150 @@ struct RecordingView: View {
     }
 }
 
-// MARK: - Dotted Wave Ring (replaces three-circle overlay)
+// MARK: - Ambient Recording Glow
 
-/// 16 dots arranged in a ring. While actively capturing, each dot pulses
-/// easeInOut with a per-dot stagger, giving a travelling-wave appearance.
-/// Paused sessions freeze the animation to visually distinguish from Stopped.
+/// A single soft, centered glow that fades in and gently breathes for as
+/// long as recording is active — a calmer replacement for the earlier
+/// two-blob drifting glow, which read as busy/messy.
+private struct AmbientRecordingGlow: View {
+    let isActive: Bool
+    @State private var breathe = false
+
+    var body: some View {
+        Circle()
+            .fill(AppTheme.recordingRed.opacity(0.25))
+            .frame(width: 320, height: 320)
+            .blur(radius: 90)
+            .scaleEffect(breathe ? 1.12 : 0.92)
+            .opacity(isActive ? 1 : 0)
+            .animation(.easeInOut(duration: 0.6), value: isActive)
+            .onAppear { startBreathing() }
+            .onChange(of: isActive) { _, newValue in if newValue { startBreathing() } }
+    }
+
+    private func startBreathing() {
+        guard isActive else { return }
+        withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+            breathe.toggle()
+        }
+    }
+}
+
+// MARK: - Sparkling Ring Indicator
+
+/// A single breathing ring around the mic that continuously sheds small
+/// sparkles from its edge, which drift down and fade — like glitter falling
+/// off the circle — for as long as recording is active.
 struct MicWaveIndicator: View {
     let isActive: Bool
-    @State private var animating = false
 
-    private let dotCount     = 16
-    private let ringRadius: CGFloat = 68
-    private let dotSize:    CGFloat = 7
+    private let ringRadius: CGFloat = 54
 
     var body: some View {
         ZStack {
-            ForEach(0..<dotCount, id: \.self) { i in
-                let angle  = Angle(degrees: Double(i) / Double(dotCount) * 360)
-                let delay  = Double(i) / Double(dotCount) * 0.7
+            SparkleFall(ringRadius: ringRadius, isActive: isActive)
 
-                Circle()
-                    .fill(AppTheme.recordingRed.opacity(isActive ? 0.85 : 0.20))
-                    .frame(width: dotSize, height: dotSize)
-                    .scaleEffect(animating ? 1.6 : 0.7)
-                    .animation(
-                        isActive
-                            ? .easeInOut(duration: 0.7)
-                                .repeatForever(autoreverses: true)
-                                .delay(delay)
-                            : .easeInOut(duration: 0.25),
-                        value: animating
-                    )
-                    .offset(
-                        x: ringRadius * CGFloat(cos(angle.radians)),
-                        y: ringRadius * CGFloat(sin(angle.radians))
-                    )
-            }
+            PulsingRing(radius: ringRadius, isActive: isActive)
 
-            // Mic icon at centre
+            Circle()
+                .fill(AppTheme.recordingRed.opacity(isActive ? 0.16 : 0.08))
+                .frame(width: ringRadius * 1.1, height: ringRadius * 1.1)
+                .animation(.easeInOut(duration: 0.3), value: isActive)
+
             Image(systemName: "mic.fill")
-                .font(.system(size: 44))
+                .font(.system(size: 40))
                 .foregroundStyle(isActive ? AppTheme.recordingRed : AppTheme.textSecondary)
-                .scaleEffect(isActive ? 1.06 : 1.0)
+                .scaleEffect(isActive ? 1.05 : 1.0)
                 .animation(
                     isActive
-                        ? .easeInOut(duration: 0.6).repeatForever(autoreverses: true)
+                        ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
                         : .easeInOut(duration: 0.25),
                     value: isActive
                 )
         }
-        .frame(
-            width:  (ringRadius + dotSize) * 2 + 10,
-            height: (ringRadius + dotSize) * 2 + 10
-        )
-        .onAppear { if isActive { animating = true } }
-        .onChange(of: isActive) { _, newValue in animating = newValue }
+        .frame(width: ringRadius * 2.8, height: ringRadius * 2.8)
+    }
+}
+
+/// The circle around the mic — eases from slightly smaller to slightly
+/// larger and back, forever, while recording. Settles to a static, dim ring
+/// when not recording.
+private struct PulsingRing: View {
+    let radius: CGFloat
+    let isActive: Bool
+
+    @State private var grow = false
+
+    var body: some View {
+        Circle()
+            .stroke(AppTheme.recordingRed.opacity(isActive ? 0.6 : 0.2), lineWidth: 2)
+            .frame(width: radius * 2, height: radius * 2)
+            .scaleEffect(grow ? 1.08 : 0.96)
+            .animation(
+                isActive
+                    ? .easeInOut(duration: 1.6).repeatForever(autoreverses: true)
+                    : .easeInOut(duration: 0.4),
+                value: grow
+            )
+            .onAppear { if isActive { grow = true } }
+            .onChange(of: isActive) { _, newValue in grow = newValue }
+    }
+}
+
+/// A handful of sparkles spawned around the ring's circumference, each one
+/// falling and fading independently on its own loop and delay.
+private struct SparkleFall: View {
+    let ringRadius: CGFloat
+    let isActive: Bool
+
+    private let count = 8
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { i in
+                SparkleParticle(index: i, ringRadius: ringRadius, isActive: isActive)
+            }
+        }
+    }
+}
+
+/// One sparkle: it appears on the ring's edge, then drifts down and fades
+/// out while shrinking, on a repeating loop with a per-particle delay/speed
+/// so the shower reads as scattered rather than synchronized.
+private struct SparkleParticle: View {
+    let index: Int
+    let ringRadius: CGFloat
+    let isActive: Bool
+
+    @State private var fallen = false
+
+    private var angle: Double { (Double(index) / 8) * 2 * .pi }
+    private var startX: CGFloat { ringRadius * CGFloat(cos(angle)) }
+    private var startY: CGFloat { ringRadius * CGFloat(sin(angle)) }
+    private var drift: CGFloat { CGFloat((index % 3) - 1) * 6 }
+    private var fallDistance: CGFloat { 44 + CGFloat(index % 3) * 10 }
+    private var duration: Double { 1.3 + Double(index % 4) * 0.25 }
+    private var delay: Double { Double(index) * 0.22 }
+    private var symbolSize: CGFloat { index.isMultiple(of: 2) ? 6 : 4 }
+
+    var body: some View {
+        Image(systemName: "sparkle")
+            .font(.system(size: symbolSize))
+            .foregroundStyle(AppTheme.saveAmber)
+            .offset(
+                x: startX + (fallen ? drift : 0),
+                y: fallen ? startY + fallDistance : startY
+            )
+            .opacity(fallen ? 0 : 0.95)
+            .scaleEffect(fallen ? 0.3 : 1.0)
+            .animation(
+                isActive
+                    ? .easeIn(duration: duration).repeatForever(autoreverses: false).delay(delay)
+                    : .easeOut(duration: 0.3),
+                value: fallen
+            )
+            .onAppear { if isActive { fallen = true } }
+            .onChange(of: isActive) { _, newValue in fallen = newValue }
     }
 }
 

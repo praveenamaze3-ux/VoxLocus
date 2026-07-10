@@ -19,14 +19,12 @@ class NoteEntity: NSManagedObject, Identifiable {
     @NSManaged public var longitude: Double
     @NSManaged public var locationName: String?
     @NSManaged public var isSyncedToCloud: Bool
-    /// User-facing soft-delete flag. Named to avoid colliding with
-    /// NSManagedObject's own `isDeleted` (a transient, framework-managed
-    /// property for "removed from context") — Objective-C's `is`-prefix
-    /// convention maps that property's setter to `setDeleted:`, so
-    /// overriding it with a persisted attribute of the same name crashes
-    /// with "unrecognized selector setDeleted:" the moment it's assigned.
     @NSManaged public var isSoftDeleted: Bool
     @NSManaged public var todosJSON: String?
+    /// Firebase Auth uid of the account that created this note. Scopes the
+    /// local (single shared SQLite store) so signing in as a different
+    /// account never shows another account's notes.
+    @NSManaged public var ownerUID: String?
 }
 
 extension NoteEntity {

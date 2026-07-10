@@ -53,6 +53,10 @@ struct AuthView: View {
                 }
 
                 Button {
+                    guard AuthService.isValidEmailFormat(email) else {
+                        authService.errorMessage = "That email address doesn't look valid. Please enter it in the format name@example.com."
+                        return
+                    }
                     Task {
                         if mode == .login {
                             await authService.signIn(email: email, password: password)
@@ -104,7 +108,7 @@ struct AuthView: View {
         }
         .foregroundStyle(AppTheme.textPrimary)
         .padding()
-        .glassEffect(.regular.tint(AppTheme.surface.opacity(0.5)), in: RoundedRectangle(cornerRadius: 12))
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(AppTheme.border, lineWidth: 1))
     }
 }

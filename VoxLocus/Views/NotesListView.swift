@@ -8,10 +8,18 @@ struct NotesListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                AppTheme.background.ignoresSafeArea()
+                LinearGradient(
+                    colors: [AppTheme.background, AppTheme.surfaceRaised],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea()
+                NotesAmbientBackground()
+                    .ignoresSafeArea()
+
                 VStack(spacing: 0) {
                     if !viewModel.nearbySuggestions.isEmpty {
                         nearbyBanner
+                            .transition(.move(edge: .top).combined(with: .opacity))
                     }
                     FilterBarView(
                         selectedCategory: $viewModel.selectedCategory,
@@ -31,15 +39,22 @@ struct NotesListView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity
+                            ))
                         }
                         .onDelete { indices in
-                            for index in indices {
-                                viewModel.delete(viewModel.filteredNotes[index])
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                for index in indices {
+                                    viewModel.delete(viewModel.filteredNotes[index])
+                                }
                             }
                         }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .background(AppTheme.surface.opacity(0.45).ignoresSafeArea())
                     .searchable(text: $viewModel.searchText, prompt: "Search notes")
                     .overlay {
                         if viewModel.filteredNotes.isEmpty {
@@ -48,9 +63,12 @@ struct NotesListView: View {
                                 systemImage: "note.text",
                                 description: Text("Record your first thought from the Record tab.")
                             )
+                            .transition(.opacity)
                         }
                     }
                 }
+                .animation(.easeInOut(duration: 0.3), value: viewModel.nearbySuggestions.isEmpty)
+                .animation(.easeInOut(duration: 0.25), value: viewModel.filteredNotes.isEmpty)
             }
             .navigationTitle("Smart Notes")
             .toolbarColorScheme(.dark, for: .navigationBar)
@@ -79,9 +97,41 @@ struct NotesListView: View {
         }
         .foregroundStyle(AppTheme.textPrimary)
         .padding(10)
-        .glassEffect(.regular.tint(AppTheme.saveAmber.opacity(0.55)), in: RoundedRectangle(cornerRadius: 12))
+        .background(AppTheme.saveAmber.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(AppTheme.saveAmber.opacity(0.5), lineWidth: 0.5)
+        )
         .padding(.horizontal, 12)
         .padding(.top, 8)
+    }
+}
+
+/// Slow-drifting, heavily-blurred color blobs in theme colors — gives the
+/// otherwise flat background some depth without competing with the frosted
+/// filter bar / list panels drawn on top of it.
+private struct NotesAmbientBackground: View {
+    @State private var drift = false
+
+    var body: some View {
+        ZStack {
+            blob(color: AppTheme.accent,    size: 240, x: drift ? -90 : -130, y: drift ? -260 : -220)
+            blob(color: AppTheme.saveAmber, size: 200, x: drift ?  120 :  150, y: drift ?   80 :   40)
+            blob(color: AppTheme.success,   size: 220, x: drift ?  -60 :  -20, y: drift ?  430 :  470)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 6).repeatForever(autoreverses: true)) {
+                drift = true
+            }
+        }
+    }
+
+    private func blob(color: Color, size: CGFloat, x: CGFloat, y: CGFloat) -> some View {
+        Circle()
+            .fill(color.opacity(0.16))
+            .frame(width: size, height: size)
+            .blur(radius: 80)
+            .offset(x: x, y: y)
     }
 }
 

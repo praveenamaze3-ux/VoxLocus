@@ -9,30 +9,30 @@ struct FilterBarView: View {
     var body: some View {
         VStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
-                GlassEffectContainer(spacing: 8) {
-                    HStack(spacing: 8) {
-                        chip(title: "All", isSelected: selectedCategory == nil) {
-                            selectedCategory = nil
-                        }
-                        ForEach(NoteCategory.allCases) { category in
-                            chip(title: category.rawValue, systemImage: category.systemImage, isSelected: selectedCategory == category) {
+                HStack(spacing: 8) {
+                    chip(title: "All", isSelected: selectedCategory == nil) {
+                        withAnimation(.easeInOut(duration: 0.25)) { selectedCategory = nil }
+                    }
+                    ForEach(NoteCategory.allCases) { category in
+                        chip(title: category.rawValue, systemImage: category.systemImage, isSelected: selectedCategory == category) {
+                            withAnimation(.easeInOut(duration: 0.25)) {
                                 selectedCategory = (selectedCategory == category) ? nil : category
                             }
                         }
                     }
-                    .padding(.horizontal)
                 }
+                .padding(.horizontal)
             }
 
             HStack(spacing: 16) {
-                Toggle(isOn: $showOnlyWithTodos) {
+                Toggle(isOn: animatedBinding($showOnlyWithTodos)) {
                     Label("Has To-Dos", systemImage: "checklist")
                 }
                 .toggleStyle(.button)
                 .tint(AppTheme.accent)
                 .font(.caption)
 
-                Toggle(isOn: $showOnlyNearby) {
+                Toggle(isOn: animatedBinding($showOnlyNearby)) {
                     Label("Nearby", systemImage: "location.fill")
                 }
                 .toggleStyle(.button)
@@ -45,7 +45,20 @@ struct FilterBarView: View {
             .foregroundStyle(AppTheme.textSecondary)
         }
         .padding(.vertical, 6)
-        .background(AppTheme.background)
+        .background(AppTheme.surfaceRaised)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AppTheme.border.opacity(0.6))
+                .frame(height: 0.5)
+        }
+    }
+
+    /// Wraps a toggle binding so flipping it animates the resulting list change.
+    private func animatedBinding(_ binding: Binding<Bool>) -> Binding<Bool> {
+        Binding(
+            get: { binding.wrappedValue },
+            set: { newValue in withAnimation(.easeInOut(duration: 0.25)) { binding.wrappedValue = newValue } }
+        )
     }
 
     private func chip(title: String, systemImage: String? = nil, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -62,9 +75,9 @@ struct FilterBarView: View {
             .foregroundStyle(isSelected ? AppTheme.background : AppTheme.textSecondary)
         }
         .buttonStyle(.plain)
-        .glassEffect(
-            isSelected ? .regular.tint(AppTheme.accent).interactive() : .regular.interactive(),
-            in: .capsule
+        .background(isSelected ? AppTheme.accent : AppTheme.surface, in: .capsule)
+        .overlay(
+            Capsule().strokeBorder(AppTheme.border, lineWidth: isSelected ? 0 : 0.5)
         )
     }
 }

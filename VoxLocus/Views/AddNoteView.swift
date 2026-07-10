@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import FirebaseAuth
 internal import CoreData
 
 struct AddNoteView: View {
@@ -114,8 +115,11 @@ struct AddNoteView: View {
                             }
                             .foregroundStyle(AppTheme.recordingRed)
                             .padding(12)
-                            .glassEffect(.regular.tint(AppTheme.recordingRed.opacity(0.35)),
-                                        in: RoundedRectangle(cornerRadius: 10))
+                            .background(AppTheme.recordingRed.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .strokeBorder(AppTheme.recordingRed.opacity(0.4), lineWidth: 0.5)
+                            )
                         }
 
                         // MARK: Save button
@@ -235,6 +239,7 @@ struct AddNoteView: View {
             e.category = dto.category; e.latitude = dto.latitude; e.longitude = dto.longitude
             e.locationName = dto.locationName; e.todos = dto.todos
             e.isSyncedToCloud = false; e.isSoftDeleted = false
+            e.ownerUID = Auth.auth().currentUser?.uid
             e.encryptedPayload = try? EncryptionService.encrypt(dto)
         }
     }

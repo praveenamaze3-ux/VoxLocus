@@ -1,6 +1,7 @@
 import FirebaseFirestore
 import FirebaseAuth
 import Foundation
+internal import CoreData
 
 actor FirebaseSyncService {
 
@@ -82,12 +83,58 @@ actor SyncRetryQueue {
         pending.append(dto)
     }
 
+    /// Re-uploads every note still marked pending-sync for the signed-in
+    /// account. Reads Core Data directly — the ground truth of what's
+    /// actually unsynced — rather than only the in-memory `pending` list, so
+    /// notes created offline still catch up after the app is relaunched, not
+    /// just within the same process. Called whenever connectivity is
+    /// restored (or the app opens while already online).
     func flush() async {
-        guard !pending.isEmpty else { return }
-        let items = pending; pending.removeAll()
-        for dto in items {
-            do { try await FirebaseSyncService.shared.uploadNote(dto) }
-            catch { pending.append(dto) }
+        pending.removeAll()
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+
+        let context = PersistenceController.shared.newBackgroundContext()
+        let unsynced: [NoteDTO] = await context.perform {
+            let request = NoteEntity.fetchRequest()
+            request.predicate = NSPredicate(
+                format: "isSyncedToCloud == NO AND (isSoftDeleted == NO OR isSoftDeleted == nil) AND ownerUID == %@",
+                uid
+            )
+            let notes = (try? context.fetch(request)) ?? []
+            return notes.map { note in
+                NoteDTO(
+                    id: note.id,
+                    title: note.displayTitle,
+                    transcript: note.transcript ?? "",
+                    createdAt: note.createdAt,
+                    updatedAt: note.updatedAt,
+                    category: note.category ?? "Other",
+                    latitude: note.latitude,
+                    longitude: note.longitude,
+                    locationName: note.locationName,
+                    todos: note.todos
+                )
+            }
+        }
+
+        for dto in unsynced {
+            do {
+                try await FirebaseSyncService.shared.uploadNote(dto)
+                await markSynced(id: dto.id, context: context)
+            } catch {
+                pending.append(dto)
+            }
+        }
+    }
+
+    private func markSynced(id: UUID, context: NSManagedObjectContext) async {
+        await context.perform {
+            let request = NoteEntity.fetchRequest()
+            request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+            if let entity = try? context.fetch(request).first {
+                entity.isSyncedToCloud = true
+                try? context.save()
+            }
         }
     }
 }
