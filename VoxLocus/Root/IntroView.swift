@@ -16,45 +16,55 @@ struct IntroView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [AppTheme.background, AppTheme.surfaceRaised],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            Circle()
-                .stroke(AppTheme.accent.opacity(0.35), lineWidth: 2)
-                .frame(width: 150, height: 150)
-                .scaleEffect(ringScale)
-                .opacity(ringOpacity)
-
+            GradientBackground()
+            pulsingRing
             VStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.accent.opacity(0.18))
-                        .frame(width: 104, height: 104)
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 44, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent)
-                }
-                .scaleEffect(logoScale)
-                .opacity(logoOpacity)
-
-                Text("VoxLocus")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundStyle(AppTheme.textPrimary)
-                    .offset(y: titleOffset)
-                    .opacity(titleOpacity)
-
-                Text("Speak it. Remember it. Right where you are.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                    .opacity(taglineOpacity)
+                logoMark
+                title
+                tagline
             }
         }
         .onAppear(perform: animate)
+    }
+
+    // MARK: - Pieces
+
+    private var pulsingRing: some View {
+        Circle()
+            .stroke(AppTheme.accent.opacity(0.35), lineWidth: 2)
+            .frame(width: 150, height: 150)
+            .scaleEffect(ringScale)
+            .opacity(ringOpacity)
+    }
+
+    private var logoMark: some View {
+        ZStack {
+            Circle()
+                .fill(AppTheme.accent.opacity(0.18))
+                .frame(width: 104, height: 104)
+            Image(systemName: "mic.fill")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundStyle(AppTheme.accent)
+        }
+        .scaleEffect(logoScale)
+        .opacity(logoOpacity)
+    }
+
+    private var title: some View {
+        Text("VoxLocus")
+            .font(.system(size: 38, weight: .bold, design: .rounded))
+            .foregroundStyle(AppTheme.textPrimary)
+            .offset(y: titleOffset)
+            .opacity(titleOpacity)
+    }
+
+    private var tagline: some View {
+        Text("Speak it. Remember it. Right where you are.")
+            .font(.subheadline)
+            .foregroundStyle(AppTheme.textSecondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 40)
+            .opacity(taglineOpacity)
     }
 
     private func animate() {

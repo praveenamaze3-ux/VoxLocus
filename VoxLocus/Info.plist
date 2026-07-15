@@ -6,15 +6,7 @@
 	<array>
 		<string>location</string>
 	</array>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SmartNotes tags your notes with your current location so you can rediscover them when you return to the same place.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>SmartNotes uses background location to notify you when you return to a place where you have saved notes.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>SmartNotes records your voice to transcribe and save notes hands-free.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>SmartNotes uses on-device speech recognition to convert your recordings into searchable text.</string>
 	<key>NSRemindersUsageDescription</key>
-	<string>SmartNotes can create Reminders from action items it detects in your notes.</string>
+	<string>VoxLocus can create Reminders from action items it detects in your notes.</string>
 </dict>
 </plist>

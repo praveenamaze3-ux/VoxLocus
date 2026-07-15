@@ -21,7 +21,7 @@ actor RemindersService {
         for todo in todos {
             let reminder = EKReminder(eventStore: store)
             reminder.title = todo.text
-            reminder.notes = "From note: \(noteTitle)"
+            reminder.notes = String(localized: "From note: \(noteTitle)")
             reminder.calendar = calendar
             reminder.isCompleted = todo.isCompleted
 
@@ -51,7 +51,7 @@ actor RemindersService {
 
     enum RemindersError: LocalizedError {
         case accessDenied
-        var errorDescription: String? { "Reminders access was denied. Enable it in Settings to auto-create checklists." }
+        var errorDescription: String? { String(localized: "Reminders access was denied. Enable it in Settings to auto-create checklists.") }
     }
 }
 

@@ -9,119 +9,34 @@ struct RecordingView: View {
         _viewModel = StateObject(wrappedValue: RecordingViewModel(locationService: LocationGeofenceService()))
     }
 
-    private var statusText: String {
-        if viewModel.isRecording {
-            return viewModel.isPaused ? "Paused" : "Listening…"
-        }
-        if viewModel.pendingTranscript != nil {
-            return "Tap Save to store this note"
-        }
-        return "Tap Start to begin"
-    }
-
-    /// True only while actively capturing (not paused) — drives the ambient
-    /// glow/blur and the transcript box's recording glow.
-    private var recordingActive: Bool { viewModel.isRecording && !viewModel.isPaused }
-
     var body: some View {
         ZStack {
-            AppTheme.background.ignoresSafeArea()
-            AmbientRecordingGlow(isActive: recordingActive)
+            ScreenBackground()
+            AmbientRecordingGlow(isActive: viewModel.isActivelyCapturing)
                 .ignoresSafeArea()
 
             VStack(spacing: 20) {
                 Spacer()
 
-                MicWaveIndicator(isActive: viewModel.isRecording && !viewModel.isPaused)
-
-                Text(statusText)
-                    .font(.title3)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 10)
-                    .animation(.easeInOut, value: statusText)
-
+                // MARK: Mic + status
+                MicWaveIndicator(isActive: viewModel.isActivelyCapturing)
+                statusText
                 transcriptBox
-
                 if !networkMonitor.isConnected {
-                    Label("Offline — note will sync later", systemImage: "wifi.slash")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.saveAmber)
+                    offlineLabel
                 }
 
                 Spacer()
 
-                VStack(spacing: 14) {
-                    GlassEffectContainer(spacing: 14) {
-                        HStack(spacing: 14) {
-                            Button {
-                                if viewModel.isRecording {
-                                    viewModel.stop()
-                                } else {
-                                    viewModel.start()
-                                }
-                            } label: {
-                                Label(viewModel.isRecording ? "Stop" : "Start",
-                                      systemImage: viewModel.isRecording ? "stop.fill" : "mic.fill")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            }
-                            .buttonStyle(.glassProminent)
-                            .tint(viewModel.isRecording ? AppTheme.recordingRed : AppTheme.accent)
-                            .disabled(viewModel.isProcessing)
+                // MARK: Controls
+                controlButtons
 
-                            Button {
-                                if viewModel.isPaused {
-                                    viewModel.resume()
-                                } else {
-                                    viewModel.pause()
-                                }
-                            } label: {
-                                Label(viewModel.isPaused ? "Resume" : "Pause",
-                                      systemImage: viewModel.isPaused ? "play.fill" : "pause.fill")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            }
-                            .buttonStyle(.glass)
-                            .tint(AppTheme.saveAmber)
-                            .disabled(!viewModel.isRecording || viewModel.isProcessing)
-                        }
-
-                        if viewModel.pendingTranscript != nil {
-                            Button {
-                                viewModel.save()
-                            } label: {
-                                Label("Save Note", systemImage: "checkmark.circle.fill")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                            }
-                            .buttonStyle(.glassProminent)
-                            .tint(AppTheme.success)
-                            .disabled(viewModel.isProcessing)
-                        }
-                    }
-
-                    if viewModel.isProcessing {
-                        Label("Processing…", systemImage: "hourglass")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                }
-                .padding(.horizontal, 32)
-
+                // MARK: Result feedback
                 if let saved = viewModel.lastSavedNote {
                     savedSummary(saved)
                 }
-
                 if let error = viewModel.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.recordingRed)
-                        .padding(.horizontal, 32)
+                    errorText(error)
                 }
 
                 Spacer()
@@ -133,11 +48,80 @@ struct RecordingView: View {
         }
     }
 
+    private var statusText: some View {
+        Text(viewModel.statusText)
+            .font(.title3)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(AppTheme.textSecondary)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 10)
+            .animation(.easeInOut, value: viewModel.statusText)
+    }
+
+    private var offlineLabel: some View {
+        Label("Offline — note will sync later", systemImage: "wifi.slash")
+            .font(.caption)
+            .foregroundStyle(AppTheme.saveAmber)
+    }
+
+    /// Start/Stop, Pause/Resume, and (once there's a pending transcript) Save —
+    /// grouped so the glass effect blends across whichever buttons are visible.
+    private var controlButtons: some View {
+        VStack(spacing: 14) {
+            GlassEffectContainer(spacing: 14) {
+                HStack(spacing: 14) {
+                    FullWidthLabelButton(
+                        title: viewModel.isRecording ? "Stop" : "Start",
+                        systemImage: viewModel.isRecording ? "stop.fill" : "mic.fill",
+                        tint: viewModel.isRecording ? AppTheme.recordingRed : AppTheme.accent,
+                        disabled: viewModel.isProcessing
+                    ) {
+                        if viewModel.isRecording { viewModel.stop() } else { viewModel.start() }
+                    }
+
+                    FullWidthLabelButton(
+                        title: viewModel.isPaused ? "Resume" : "Pause",
+                        systemImage: viewModel.isPaused ? "play.fill" : "pause.fill",
+                        prominent: false,
+                        tint: AppTheme.saveAmber,
+                        disabled: !viewModel.isRecording || viewModel.isProcessing
+                    ) {
+                        if viewModel.isPaused { viewModel.resume() } else { viewModel.pause() }
+                    }
+                }
+
+                if viewModel.pendingTranscript != nil {
+                    FullWidthLabelButton(
+                        title: "Save Note",
+                        systemImage: "checkmark.circle.fill",
+                        tint: AppTheme.success,
+                        disabled: viewModel.isProcessing,
+                        action: viewModel.save
+                    )
+                }
+            }
+
+            if viewModel.isProcessing {
+                Label("Processing…", systemImage: "hourglass")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textSecondary)
+            }
+        }
+        .padding(.horizontal, 32)
+    }
+
+    private func errorText(_ message: String) -> some View {
+        Text(message)
+            .font(.caption)
+            .foregroundStyle(AppTheme.recordingRed)
+            .padding(.horizontal, 32)
+    }
+
     /// Live transcript, shown below the mic as speech is captured — stays
     /// visible after Stop so the user can review it before tapping Save.
     private var transcriptBox: some View {
         ScrollView {
-            Text(viewModel.liveTranscript.isEmpty ? "Your speech will appear here…" : viewModel.liveTranscript)
+            Text(viewModel.liveTranscript.isEmpty ? String(localized: "Your speech will appear here…") : viewModel.liveTranscript)
                 .font(.body)
                 .foregroundStyle(viewModel.liveTranscript.isEmpty ? AppTheme.textSecondary : AppTheme.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -148,21 +132,21 @@ struct RecordingView: View {
         .themedCard()
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(AppTheme.recordingRed.opacity(recordingActive ? 0.6 : 0), lineWidth: 1.5)
+                .strokeBorder(AppTheme.recordingRed.opacity(viewModel.isActivelyCapturing ? 0.6 : 0), lineWidth: 1.5)
         )
-        .shadow(color: AppTheme.recordingRed.opacity(recordingActive ? 0.35 : 0),
-                radius: recordingActive ? 16 : 0)
-        .animation(.easeInOut(duration: 0.5), value: recordingActive)
+        .shadow(color: AppTheme.recordingRed.opacity(viewModel.isActivelyCapturing ? 0.35 : 0),
+                radius: viewModel.isActivelyCapturing ? 16 : 0)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.isActivelyCapturing)
         .padding(.horizontal, 32)
         .padding(.top, 34)
     }
 
     private func savedSummary(_ note: NoteDTO) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Saved as \(note.category)", systemImage: "checkmark.circle.fill")
+            Label("Saved as \(NoteCategory.displayName(for: note.category))", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(AppTheme.success)
             if !note.todos.isEmpty {
-                Text("\(note.todos.count) reminder(s) created:")
+                Text("\(note.todos.count) reminders created:")
                     .font(.caption.bold())
                     .foregroundStyle(AppTheme.textPrimary)
                 ForEach(note.todos) { todo in

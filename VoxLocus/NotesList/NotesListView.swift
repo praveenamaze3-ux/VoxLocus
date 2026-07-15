@@ -8,11 +8,7 @@ struct NotesListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [AppTheme.background, AppTheme.surfaceRaised],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .ignoresSafeArea()
+                GradientBackground()
                 NotesAmbientBackground()
                     .ignoresSafeArea()
 
@@ -27,45 +23,7 @@ struct NotesListView: View {
                         showOnlyNearby: $viewModel.showOnlyNearby
                     )
 
-                    List {
-                        ForEach(viewModel.filteredNotes) { note in
-                            NavigationLink {
-                                NoteDetailView(note: note, viewModel: viewModel)
-                            } label: {
-                                NoteRow(note: note)
-                                    .padding(12)
-                                    .themedCard()
-                            }
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .top).combined(with: .opacity),
-                                removal: .opacity
-                            ))
-                        }
-                        .onDelete { indices in
-                            withAnimation(.easeInOut(duration: 0.25)) {
-                                for index in indices {
-                                    viewModel.delete(viewModel.filteredNotes[index])
-                                }
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
-                    .background(AppTheme.surface.opacity(0.45).ignoresSafeArea())
-                    .searchable(text: $viewModel.searchText, prompt: "Search notes")
-                    .overlay {
-                        if viewModel.filteredNotes.isEmpty {
-                            ContentUnavailableView(
-                                "No Notes Yet",
-                                systemImage: "note.text",
-                                description: Text("Record your first thought from the Record tab.")
-                            )
-                            .transition(.opacity)
-                        }
-                    }
+                    notesList
                 }
                 .animation(.easeInOut(duration: 0.3), value: viewModel.nearbySuggestions.isEmpty)
                 .animation(.easeInOut(duration: 0.25), value: viewModel.filteredNotes.isEmpty)
@@ -91,7 +49,7 @@ struct NotesListView: View {
     private var nearbyBanner: some View {
         HStack {
             Image(systemName: "location.fill")
-            Text("You're near a place with \(viewModel.nearbySuggestions.count) saved note(s).")
+            Text("You're near a place with \(viewModel.nearbySuggestions.count) saved notes.")
                 .font(.caption)
             Spacer()
         }
@@ -104,6 +62,50 @@ struct NotesListView: View {
         )
         .padding(.horizontal, 12)
         .padding(.top, 8)
+    }
+
+    // MARK: - Notes list
+
+    private var notesList: some View {
+        List {
+            ForEach(viewModel.filteredNotes) { note in
+                NavigationLink {
+                    NoteDetailView(note: note, viewModel: viewModel)
+                } label: {
+                    NoteRow(note: note)
+                        .padding(12)
+                        .themedCard()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .opacity
+                ))
+            }
+            .onDelete { indices in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    for index in indices {
+                        viewModel.delete(viewModel.filteredNotes[index])
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AppTheme.surface.opacity(0.45).ignoresSafeArea())
+        .searchable(text: $viewModel.searchText, prompt: "Search notes")
+        .overlay {
+            if viewModel.filteredNotes.isEmpty {
+                ContentUnavailableView(
+                    "No Notes Yet",
+                    systemImage: "note.text",
+                    description: Text("Record your first thought from the Record tab.")
+                )
+                .transition(.opacity)
+            }
+        }
     }
 }
 
@@ -142,9 +144,8 @@ private struct NoteRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 if let category = note.category {
-                    Label(category, systemImage: NoteCategory(rawValue: category)?.systemImage ?? "tag")
+                    CategoryBadge(categoryRawValue: category)
                         .font(.caption)
-                        .foregroundStyle(AppTheme.categoryColor(for: category))
                 }
                 Spacer()
                 Text(note.createdAt, style: .date)
@@ -167,7 +168,7 @@ private struct NoteRow: View {
                         .foregroundStyle(AppTheme.textSecondary)
                 }
                 if !note.todos.isEmpty {
-                    Label("\(note.todos.count) to-do(s)", systemImage: "checklist")
+                    Label("\(note.todos.count) to-dos", systemImage: "checklist")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.success)
                 }

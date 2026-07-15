@@ -73,17 +73,17 @@ final class AuthService: ObservableObject {
         }
         switch code {
         case .invalidEmail:
-            return "That email address doesn't look valid. Please enter it in the format name@example.com."
+            return String(localized: "That email address doesn't look valid. Please enter it in the format name@example.com.")
         case .emailAlreadyInUse:
-            return "An account with this email already exists. Try logging in instead."
+            return String(localized: "An account with this email already exists. Try logging in instead.")
         case .weakPassword:
-            return "Your password is too weak. Please use at least 6 characters."
+            return String(localized: "Your password is too weak. Please use at least 6 characters.")
         case .wrongPassword, .userNotFound, .invalidCredential:
-            return "Incorrect email or password. Please try again."
+            return String(localized: "Incorrect email or password. Please try again.")
         case .networkError:
-            return "Network error. Please check your connection and try again."
+            return String(localized: "Network error. Please check your connection and try again.")
         case .tooManyRequests:
-            return "Too many attempts. Please wait a moment and try again."
+            return String(localized: "Too many attempts. Please wait a moment and try again.")
         default:
             return error.localizedDescription
         }

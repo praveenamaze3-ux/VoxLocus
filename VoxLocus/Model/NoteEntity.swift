@@ -51,7 +51,7 @@ extension NoteEntity {
             .components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
             .first?
             .trimmingCharacters(in: .whitespaces) ?? ""
-        return first.isEmpty ? "Untitled Note" : String(first.prefix(60))
+        return first.isEmpty ? String(localized: "Untitled Note") : String(first.prefix(60))
     }
 }
 
@@ -83,6 +83,28 @@ enum NoteCategory: String, CaseIterable, Identifiable, Codable {
         case .ideas:    return "lightbulb.fill"
         case .other:    return "tray.fill"
         }
+    }
+
+    /// Localized display name. `rawValue` stays a fixed, English identifier
+    /// since it's persisted (CoreData/Firebase) and used for filter matching —
+    /// only this computed property is shown to the user, so it's the only
+    /// piece that needs to flow through the String Catalog.
+    var displayName: String {
+        switch self {
+        case .personal: return String(localized: "Personal", comment: "Note category")
+        case .work:     return String(localized: "Work", comment: "Note category")
+        case .shopping: return String(localized: "Shopping", comment: "Note category")
+        case .health:   return String(localized: "Health", comment: "Note category")
+        case .ideas:    return String(localized: "Ideas", comment: "Note category")
+        case .other:    return String(localized: "Other", comment: "Note category")
+        }
+    }
+
+    /// Localized display name for an arbitrary persisted category string —
+    /// falls back to the raw value itself if it doesn't match a known case
+    /// (e.g. legacy data), so it always renders something reasonable.
+    static func displayName(for rawValue: String) -> String {
+        NoteCategory(rawValue: rawValue)?.displayName ?? rawValue
     }
 }
 

@@ -13,7 +13,16 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
     @Published var authorizationError: String?
 
     private let audioEngine = AVAudioEngine()
-    private var recognizer: SFSpeechRecognizer? = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    /// Recognizes speech in the device's current language when supported,
+    /// so recording isn't locked to English regardless of the app's UI
+    /// language — falls back to US English if the current locale has no
+    /// speech recognizer installed.
+    private var recognizer: SFSpeechRecognizer? = {
+        if let match = SFSpeechRecognizer(locale: Locale.current), match.isAvailable {
+            return match
+        }
+        return SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    }()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
 
@@ -32,7 +41,7 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         }
 
         guard speechStatus == .authorized, micGranted else {
-            authorizationError = "Microphone or Speech Recognition permission was denied. Enable it in Settings."
+            authorizationError = String(localized: "Microphone or Speech Recognition permission was denied. Enable it in Settings.")
             return false
         }
         return true
@@ -47,7 +56,7 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
         // failure here doesn't leave the engine started with no task
         // consuming its buffers (which broke the next recording attempt too).
         guard let recognizer, recognizer.isAvailable else {
-            throw NSError(domain: "SmartNotes", code: 1, userInfo: [NSLocalizedDescriptionKey: "Speech recognizer unavailable"])
+            throw NSError(domain: "SmartNotes", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Speech recognizer unavailable")])
         }
 
         let session = AVAudioSession.sharedInstance()
@@ -85,7 +94,7 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
                     self.transcript = result.bestTranscription.formattedString
                 }
                 if let error {
-                    self.authorizationError = "Recognition error: \(error.localizedDescription)"
+                    self.authorizationError = String(localized: "Recognition error: \(error.localizedDescription)")
                     self.stopAudioEngine()
                 } else if result?.isFinal ?? false {
                     self.stopAudioEngine()

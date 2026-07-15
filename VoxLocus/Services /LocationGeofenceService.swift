@@ -31,7 +31,7 @@ final class LocationGeofenceService: NSObject, ObservableObject, CLLocationManag
         case .authorizedWhenInUse, .authorizedAlways:
             startUpdating()
         default:
-            locationError = "Location access denied. Enable it in Settings."
+            locationError = String(localized: "Location access denied. Enable it in Settings.")
         }
     }
 
@@ -100,7 +100,7 @@ final class LocationGeofenceService: NSObject, ObservableObject, CLLocationManag
                 self.startUpdating()
                 self.locationError = nil
             case .denied, .restricted:
-                self.locationError = "Location access denied. Enable it in Settings."
+                self.locationError = String(localized: "Location access denied. Enable it in Settings.")
             default: break
             }
         }

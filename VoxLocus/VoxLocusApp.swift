@@ -41,10 +41,19 @@ struct SmartNotesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     let persistenceController = PersistenceController.shared
-    @StateObject private var locationService = LocationGeofenceService()
+    @StateObject private var locationService: LocationGeofenceService
     @StateObject private var networkMonitor  = NetworkMonitor.shared
     @StateObject private var authService     = AuthService.shared
+    @StateObject private var rootViewModel: RootViewModel
     @State private var showIntro = true
+
+    init() {
+        let locationService = LocationGeofenceService()
+        _locationService = StateObject(wrappedValue: locationService)
+        _rootViewModel = StateObject(wrappedValue: RootViewModel(
+            locationService: locationService, networkMonitor: NetworkMonitor.shared
+        ))
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -71,30 +80,13 @@ struct SmartNotesApp: App {
                 }
             }
             .fontDesign(.rounded)
-            .onAppear {
-                // Request at launch so the system dialog shows immediately
-                // on first run, before any view tries to use location.
-                locationService.requestPermission()
-            }
-            .task {
-                // Catches notes that were created offline in a previous
-                // session and never got flushed before the app closed.
-                if networkMonitor.isConnected {
-                    await SyncRetryQueue.shared.flush()
-                }
-            }
+            .onAppear { rootViewModel.onLaunch() }
+            .task { await rootViewModel.flushPendingSyncIfNeeded() }
             .onChange(of: networkMonitor.isConnected) { oldValue, newValue in
-                // The moment connectivity comes back, retry every
-                // pending-sync note so it flips from "Pending sync" to
-                // "Synced & encrypted in cloud" without the user doing anything.
-                if newValue && !oldValue {
-                    Task { await SyncRetryQueue.shared.flush() }
-                }
+                rootViewModel.networkStatusChanged(wasConnected: oldValue, isConnected: newValue)
             }
             .onChange(of: authService.isSignedIn) { _, signedIn in
-                if signedIn && networkMonitor.isConnected {
-                    Task { await SyncRetryQueue.shared.flush() }
-                }
+                rootViewModel.signInStatusChanged(isSignedIn: signedIn)
             }
         }
     }

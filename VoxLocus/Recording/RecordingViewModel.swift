@@ -24,6 +24,21 @@ final class RecordingViewModel: ObservableObject {
     private let context: NSManagedObjectContext
     private var cancellables = Set<AnyCancellable>()
 
+    /// User-facing status line above the mic — derived from recording state.
+    var statusText: String {
+        if isRecording {
+            return isPaused ? String(localized: "Paused") : String(localized: "Listening…")
+        }
+        if pendingTranscript != nil {
+            return String(localized: "Tap Save to store this note")
+        }
+        return String(localized: "Tap Start to begin")
+    }
+
+    /// True only while actively capturing (not paused) — drives the ambient
+    /// glow/blur and the transcript box's recording glow.
+    var isActivelyCapturing: Bool { isRecording && !isPaused }
+
     init(locationService: LocationGeofenceService, context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
         self.locationService = locationService
         self.context = context
@@ -85,7 +100,7 @@ final class RecordingViewModel: ObservableObject {
     func stop() {
         let transcript = speechService.stopRecording()
         guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            lastError = "No speech was captured. Try again and speak clearly into the microphone."
+            lastError = String(localized: "No speech was captured. Try again and speak clearly into the microphone.")
             return
         }
         pendingTranscript = transcript
@@ -119,7 +134,7 @@ final class RecordingViewModel: ObservableObject {
             .components(separatedBy: CharacterSet(charactersIn: ".!?\n"))
             .first?.trimmingCharacters(in: .whitespaces) ?? ""
         let title = rawTitle.isEmpty
-            ? "Note \(now.formatted(date: .abbreviated, time: .shortened))"
+            ? String(localized: "Note \(now.formatted(date: .abbreviated, time: .shortened))")
             : String(rawTitle.prefix(60))
 
         let noteID = UUID()
@@ -144,7 +159,7 @@ final class RecordingViewModel: ObservableObject {
                 noteTitle: String(transcript.prefix(40))
             )
         } catch {
-            lastError = "Note saved, but Reminders sync failed: \(error.localizedDescription)"
+            lastError = String(localized: "Note saved, but Reminders sync failed: \(error.localizedDescription)")
         }
 
         var savedDTO = dto
@@ -156,7 +171,7 @@ final class RecordingViewModel: ObservableObject {
             lastSavedNote = savedDTO
             await syncToFirebase(savedDTO)
         } catch {
-            lastError = "Failed to save note: \(error.localizedDescription)"
+            lastError = String(localized: "Failed to save note: \(error.localizedDescription)")
         }
     }
 
