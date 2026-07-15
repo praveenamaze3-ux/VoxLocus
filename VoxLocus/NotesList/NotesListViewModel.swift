@@ -2,6 +2,7 @@ import Foundation
 internal import CoreData
 import Combine
 import FirebaseAuth
+import CoreLocation
 
 @MainActor
 final class NotesListViewModel: NSObject, ObservableObject {
@@ -146,13 +147,16 @@ final class NotesListViewModel: NSObject, ObservableObject {
 
     // MARK: - Edit persistence
 
-    /// Saves title/transcript/category/todos changes to CoreData and re-syncs to Firestore.
+    /// Saves title/transcript/category/todos/location changes to CoreData and re-syncs to Firestore.
     func saveEdits(note: NoteEntity, newTitle: String, newTranscript: String,
-                   newCategory: String, newTodos: [TodoItem]) async throws {
+                   newCategory: String, newTodos: [TodoItem], newLocation: LocationResult?) async throws {
         note.title           = newTitle
         note.transcript      = newTranscript
         note.category        = newCategory
         note.todos           = newTodos
+        note.latitude        = newLocation?.coordinate.latitude ?? 0
+        note.longitude       = newLocation?.coordinate.longitude ?? 0
+        note.locationName    = newLocation?.name
         note.updatedAt       = Date()
         note.isSyncedToCloud = false
         PersistenceController.shared.saveContext(context)

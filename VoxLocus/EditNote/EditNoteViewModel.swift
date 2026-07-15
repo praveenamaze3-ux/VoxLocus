@@ -93,7 +93,7 @@ final class EditNoteViewModel: ObservableObject {
             do {
                 locationService?.removeGeofence(noteID: note.id)
                 try await notesListViewModel.saveEdits(note: note, newTitle: newTitle, newTranscript: t,
-                                                        newCategory: c.rawValue, newTodos: td)
+                                                        newCategory: c.rawValue, newTodos: td, newLocation: loc)
                 if let loc {
                     let dto = NoteDTO(id: note.id, title: note.title!, transcript: t,
                                        createdAt: note.safeCreatedAt, updatedAt: note.updatedAt,
