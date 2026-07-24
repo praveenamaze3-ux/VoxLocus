@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {          // make sure
 @main
 struct SmartNotesApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
 
     let persistenceController = PersistenceController.shared
     @StateObject private var locationService: LocationGeofenceService
@@ -63,7 +64,7 @@ struct SmartNotesApp: App {
                         withAnimation(.easeInOut(duration: 0.35)) { showIntro = false }
                     }
                     .transition(.opacity)
-                    .zIndex(1)
+                    .zIndex(2)
                 } else {
                     Group {
                         if authService.isSignedIn {
@@ -77,6 +78,19 @@ struct SmartNotesApp: App {
                         }
                     }
                     .transition(.opacity)
+
+                    if authService.isSignedIn && rootViewModel.isAppLocked {
+                        AppLockView(
+                            kind: BiometricAuthService.shared.capability.kind,
+                            isAuthenticating: rootViewModel.isAuthenticatingLock,
+                            errorMessage: rootViewModel.lockScreenError,
+                            onUnlockTapped: { Task { await rootViewModel.attemptUnlock() } },
+                            onSignOutTapped: { authService.signOut() }
+                        )
+                        .transition(.opacity)
+                        .zIndex(1)
+                        .onAppear { Task { await rootViewModel.attemptUnlock() } }
+                    }
                 }
             }
             .fontDesign(.rounded)
@@ -87,6 +101,9 @@ struct SmartNotesApp: App {
             }
             .onChange(of: authService.isSignedIn) { _, signedIn in
                 rootViewModel.signInStatusChanged(isSignedIn: signedIn)
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                rootViewModel.scenePhaseChanged(to: newPhase)
             }
         }
     }

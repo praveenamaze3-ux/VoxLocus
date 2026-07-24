@@ -8,5 +8,7 @@
 	</array>
 	<key>NSRemindersUsageDescription</key>
 	<string>VoxLocus can create Reminders from action items it detects in your notes.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>VoxLocus uses Face ID to keep your notes private and unlock the app quickly.</string>
 </dict>
 </plist>

@@ -17,6 +17,15 @@
         }
       }
     },
+    "%@ isn't available on this device." : {
+
+    },
+    "%@ isn't set up on this device. Enable it in Settings to use this feature." : {
+
+    },
+    "%@ isn't set up. Enable it in Settings, or sign out below." : {
+
+    },
     "%lld reminders created:" : {
       "comment" : "Header above the list of Reminders created from a recorded note",
       "localizations" : {
@@ -212,6 +221,9 @@
           }
         }
       }
+    },
+    "Authenticating…" : {
+
     },
     "Auto-suggest from text" : {
       "localizations" : {
@@ -436,6 +448,9 @@
           }
         }
       }
+    },
+    "Face ID" : {
+
     },
     "Failed to save note: %@" : {
       "localizations" : {
@@ -846,6 +861,9 @@
         }
       }
     },
+    "Optic ID" : {
+
+    },
     "Other" : {
       "comment" : "Note category",
       "localizations" : {
@@ -977,6 +995,9 @@
         }
       }
     },
+    "Privacy" : {
+
+    },
     "Processing…" : {
       "localizations" : {
         "de" : {
@@ -1073,6 +1094,9 @@
           }
         }
       }
+    },
+    "Require %@ to Unlock" : {
+
     },
     "Reset Password" : {
       "localizations" : {
@@ -1267,6 +1291,9 @@
         }
       }
     },
+    "Set a device passcode in Settings to use Face ID or Touch ID." : {
+
+    },
     "Shopping" : {
       "comment" : "Note category",
       "localizations" : {
@@ -1299,6 +1326,9 @@
           }
         }
       }
+    },
+    "Sign Out Instead" : {
+
     },
     "Sign Up" : {
       "localizations" : {
@@ -1576,6 +1606,12 @@
         }
       }
     },
+    "Too many failed attempts. Enter your device passcode to continue, or sign out below." : {
+
+    },
+    "Touch ID" : {
+
+    },
     "Unknown" : {
       "comment" : "Fallback name for a map search result with no name",
       "localizations" : {
@@ -1593,6 +1629,12 @@
         }
       }
     },
+    "Unlock VoxLocus to view your notes" : {
+
+    },
+    "Unlock with %@" : {
+
+    },
     "Untitled Note" : {
       "localizations" : {
         "de" : {
@@ -1608,6 +1650,9 @@
           }
         }
       }
+    },
+    "Use %@ or your device passcode to unlock and view your notes." : {
+
     },
     "Use My Current Location" : {
       "localizations" : {
@@ -1641,6 +1686,9 @@
           }
         }
       }
+    },
+    "VoxLocus Locked" : {
+
     },
     "Work" : {
       "comment" : "Note category",

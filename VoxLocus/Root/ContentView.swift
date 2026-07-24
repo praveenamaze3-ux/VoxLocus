@@ -30,6 +30,9 @@ struct ContentView: View {
 
 struct AccountView: View {
     @EnvironmentObject var authService: AuthService
+    @AppStorage(AppLockSettings.isEnabledKey) private var isFaceIDLockEnabled = false
+
+    private var biometry: BiometricAuthService.Capability { BiometricAuthService.shared.capability }
 
     var body: some View {
         NavigationStack {
@@ -39,6 +42,30 @@ struct AccountView: View {
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.textPrimary)
                         .padding(.vertical, 4)
+                }
+                .listRowBackground(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(AppTheme.surface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .strokeBorder(AppTheme.border, lineWidth: 0.5)
+                        )
+                )
+
+                Section {
+                    Toggle(isOn: $isFaceIDLockEnabled) {
+                        Label("Require \(biometry.kind.displayName) to Unlock", systemImage: biometry.kind.systemImage)
+                    }
+                    .tint(AppTheme.accent)
+                    .disabled(!biometry.isUsable)
+
+                    if !biometry.isUsable {
+                        Text("\(biometry.kind.displayName) isn't set up on this device. Enable it in Settings to use this feature.")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.textSecondary)
+                    }
+                } header: {
+                    Text("Privacy")
                 }
                 .listRowBackground(
                     RoundedRectangle(cornerRadius: 14)
